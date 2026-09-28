@@ -1,0 +1,19 @@
+# ── 개인 데이터 (캐릭터·대화 기록) — 절대 올리지 않음 ──
+data/
+
+# ── Python 캐시 ──
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+env/
+
+# ── OS / 에디터 ──
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ── 로그 ──
+*.log

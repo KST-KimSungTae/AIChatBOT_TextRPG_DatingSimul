@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>캐릭터 챗</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Noto+Sans+KR:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── 화면 1: 캐릭터 목록 ───────────────────── -->
+  <section class="view" id="viewList">
+    <div class="list">
+      <header class="list__head">
+        <h1 class="brand">캐릭터 챗</h1>
+        <button class="btn btn--ember" id="newCharBtn">+ 새 캐릭터</button>
+      </header>
+      <div class="cards" id="cards"></div>
+      <p class="list__empty" id="listEmpty" hidden>아직 만든 캐릭터가 없어. 새로 하나 만들어봐.</p>
+    </div>
+  </section>
+
+  <!-- ── 화면 2: 캐릭터 생성 ───────────────────── -->
+  <section class="view" id="viewCreate" hidden>
+    <div class="create">
+      <header class="create__head">
+        <button class="btn btn--ghost" id="backFromCreate">← 뒤로</button>
+        <h1>새 캐릭터</h1>
+        <button class="btn btn--ember" id="saveCharBtn">저장하고 시작</button>
+      </header>
+      <form id="createForm" class="form" autocomplete="off">
+        <div class="form__section">
+          <h2 class="form__title">캐릭터</h2>
+          <div id="charFields" class="fields"></div>
+        </div>
+        <details class="form__section" open>
+          <summary class="form__title">플레이어 (나)</summary>
+          <p class="form__hint">내가 이 이야기 속에서 누구인지. 비워도 돼.</p>
+          <div id="playerFields" class="fields"></div>
+        </details>
+      </form>
+    </div>
+  </section>
+
+  <!-- ── 화면 3: 대화 ─────────────────────────── -->
+  <section class="view" id="viewChat" hidden>
+    <div class="app">
+      <main class="stage">
+        <header class="stage__head">
+          <div>
+            <div class="stage__top">
+              <button class="btn btn--ghost btn--sm" id="backFromChat">←</button>
+              <h1 class="char-name" id="charName">캐릭터</h1>
+            </div>
+            <p class="scene" id="scene"></p>
+          </div>
+          <button class="reset" id="resetBtn" title="처음부터 다시">처음부터</button>
+        </header>
+        <div class="log" id="log"></div>
+        <form class="composer" id="composer" autocomplete="off">
+          <div class="composer__fields">
+            <input class="composer__action" id="actionInput" type="text"
+                   placeholder="행동·상황 (선택) — 예: 눈을 크게 뜨며" aria-label="행동/상황 입력">
+            <input class="composer__input" id="input" type="text"
+                   placeholder="대화 (선택) — 예: 오늘 이쁘네?" aria-label="대화 입력">
+          </div>
+          <button class="composer__send" id="sendBtn" type="submit">보내기</button>
+        </form>
+      </main>
+      <aside class="panel">
+        <div class="portrait" id="portrait" aria-hidden="true">
+          <span class="portrait__hint">초상은 아직<br>그려지지 않았다</span>
+        </div>
+        <section class="gauge">
+          <div class="gauge__label"><span>호감도</span><span class="gauge__value" id="affinityValue">30</span></div>
+          <div class="gauge__track"><div class="gauge__fill" id="affinityFill"></div></div>
+        </section>
+        <section class="mood">
+          <span class="mood__label">기분</span>
+          <span class="mood__value" id="mood">—</span>
+        </section>
+        <section class="memories">
+          <h2 class="memories__title" id="memTitle">기억하는 것</h2>
+          <ul class="memories__list" id="memories">
+            <li class="memories__empty">아직 기억하는 게 없어.</li>
+          </ul>
+        </section>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 캐릭터 준비 로딩 오버레이 -->
+  <div class="overlay" id="overlay" hidden>
+    <div class="overlay__box">
+      <div class="overlay__spinner"></div>
+      <h2 class="overlay__title">캐릭터를 준비하는 중…</h2>
+      <p class="overlay__desc">성격과 상황을 분석해 첫 감정을 잡고 있어.<br>보통 10~30초 정도 걸려.</p>
+      <div class="overlay__timer" id="overlayTimer">0초</div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
