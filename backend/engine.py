@@ -43,17 +43,24 @@ class ChatEngine:
             start = 30
         start = max(0, min(100, start))
 
-        # 초기 기분: 캐릭터에 이미 저장돼 있으면(생성 시 계산됨) 그대로 읽어 즉시 시작한다.
+        # 초기 기분·오프닝: 캐릭터에 이미 저장돼 있으면(생성 시 계산됨) 그대로 읽어 즉시 시작한다.
         saved = character.get("initial_state") or {}
         saved_mood = saved.get("mood")
+        saved_opening = saved.get("opening")
         self.state = {
             "affinity": start,
             "mood": saved_mood if saved_mood in self.moods else None,
             "memories": [],
         }
         self.history = []
+        # 저장된 초기 상태가 없으면(구버전 캐릭터 등) 지금 한 번 계산해 폴백
         if self.state["mood"] is None:
-            self.state["mood"] = self._decide_initial_mood()
+            decided = self._decide_opening()
+            self.state["mood"] = decided["mood"]
+            saved_opening = decided.get("opening")
+        # 오프닝 대사가 있으면 캐릭터가 먼저 건넨 첫 대사로 대화 기록에 넣는다.
+        if saved_opening:
+            self.history.append({"role": "assistant", "content": saved_opening})
 
     def export_session(self):
         """현재 진행 상태를 저장용 dict로 반환."""
@@ -66,8 +73,8 @@ class ChatEngine:
 
     @classmethod
     def scan_initial_state(cls, character, player=None):
-        """캐릭터 '생성 시점'에 딱 한 번 호출. AI로 초기 기분을 계산해 dict로 돌려준다.
-        이 결과를 캐릭터 JSON의 'initial_state'에 저장해두면, 이후 진입 때는 계산 없이 즉시 로드된다."""
+        """캐릭터 '생성 시점'에 딱 한 번 호출. AI로 초기 기분 + 오프닝 대사를 만들어 dict로 돌려준다.
+        이 결과를 캐릭터 JSON의 'initial_state'에 저장 → 이후 진입 때는 계산 없이 즉시 로드."""
         engine = cls.__new__(cls)          # __init__을 우회해 계산용으로만 생성
         engine.char = character
         engine.player = player or {}
@@ -77,40 +84,47 @@ class ChatEngine:
         except (ValueError, TypeError):
             aff = 30
         engine.state = {"affinity": max(0, min(100, aff))}
-        mood = engine._decide_initial_mood()
-        return {"mood": mood}
+        return engine._decide_opening()
 
-    def _decide_initial_mood(self):
-        """AI에게 '이 캐릭터가 이 상황에서 지금 어떤 기분인지'를 판단시켜 초기 기분을 정한다.
-        성격·배경·초기 장면·관계·호감도를 근거로 기분 목록 중 하나를 고르게 한다.
-        실패하면 안전하게 목록 중간값으로 폴백."""
+    def _decide_opening(self):
+        """AI에게 '이 캐릭터가 이 장면에서 지금 어떤 기분이고, 먼저 뭐라고 말을 거는지'를 판단시킨다.
+        초기 기분(mood)과 오프닝 대사(opening)를 함께 만든다. 실패 시 안전한 폴백."""
         c = self.char
         mood_list = ", ".join(self.moods)
-        rel = c.get("relationship", "")
-        prompt = f"""다음 인물이 '이야기가 시작되는 지금 이 순간' 어떤 기분일지 하나만 판단해라.
+        prompt = f"""다음 인물로서 '이야기가 시작되는 지금 이 순간'을 연다.
+이 인물이 지금 어떤 기분인지, 그리고 유저에게 먼저 건네는 첫 대사(오프닝)를 만든다.
 
 [인물] {c.get('name','')}
 - 성격: {c.get('personality','')}
+- 말투: {c.get('speech_style','')}
 - 배경: {c.get('background','')}
-- 유저와의 관계: {rel}
+- 유저와의 관계: {c.get('relationship','')}
+- 유저를 부르는 호칭: {c.get('address_term','너')}
 - 유저에 대한 호감도: {self.state['affinity']}/100
 - 지금 장면: {c.get('scene','')}
 
-이 상황과 감정을 종합해서, 아래 목록 중 지금 기분에 가장 맞는 것 '하나'만 고른다.
-가능한 기분: {mood_list}
+규칙:
+- opening은 이 인물이 장면 속에서 유저에게 '먼저' 건네는 첫 대사와 행동이다. 살아있는 인물처럼, 설정된 말투로.
+- 반드시 한국어로만. 중국어·일본어·영어 금지.
+- mood는 아래 목록 중 지금 기분에 가장 맞는 '하나'만.
+- 가능한 기분: {mood_list}
 
 반드시 아래 JSON 형식으로만 답한다.
-{{"mood": "목록 중 하나"}}"""
+{{"mood": "목록 중 하나", "opening": "인물의 첫 대사와 행동 (한국어)"}}"""
+        result = {"mood": self.moods[len(self.moods) // 2] if self.moods else "차분",
+                  "opening": ""}
         try:
             raw = self._call_ollama([{"role": "user", "content": prompt}])
             data = json.loads(self._extract_json(raw))
             mood = (data.get("mood") or "").strip()
             if mood in self.moods:
-                return mood
+                result["mood"] = mood
+            opening = (data.get("opening") or "").strip()
+            if opening:
+                result["opening"] = opening
         except Exception:
             pass
-        # 폴백: 목록 중간값
-        return self.moods[len(self.moods) // 2] if self.moods else "차분"
+        return result
 
     # ── 설정값을 프롬프트 조각으로 (빈 값은 건너뜀) ──
     def _line(self, label, value):
