@@ -289,6 +289,31 @@ async function send(action, dialogue) {
   }
 }
 
+async function advance() {
+  // 유저 입력 없이 이야기를 다음으로 진전
+  $("actionInput").disabled = true;
+  $("input").disabled = true;
+  $("sendBtn").disabled = true;
+  $("advanceBtn").disabled = true;
+  const typing = showTyping();
+  try {
+    const res = await fetch(`/api/chat/${currentCharId}/advance`, { method: "POST" });
+    const data = await res.json();
+    typing.remove();
+    addMessage(data.reply, "char");
+    renderState(data);
+  } catch (e) {
+    typing.remove();
+    addMessage("(응답을 받지 못했어. 잠시 후 다시.)", "char");
+  } finally {
+    $("actionInput").disabled = false;
+    $("input").disabled = false;
+    $("sendBtn").disabled = false;
+    $("advanceBtn").disabled = false;
+    $("input").focus();
+  }
+}
+
 function escapeHtml(s) {
   return (s || "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -309,6 +334,7 @@ $("composer").addEventListener("submit", (e) => {
   const dialogue = $("input").value.trim();
   if (action || dialogue) send(action, dialogue);
 });
+$("advanceBtn").addEventListener("click", advance);
 
 // ── 시작 ──────────────────────────────────────
 async function init() {

@@ -201,6 +201,7 @@ class ChatEngine:
 [대화 규칙]
 - reply는 반드시 유저의 '마지막 말'에 직접 반응하는 내용으로 시작한다. 방금 한 말을 무시하고 설정이나 배경을 혼자 읊지 않는다.
 - 유저 입력에서 괄호 '( )' 안은 유저의 '행동·상황' 묘사이고, 괄호 밖은 유저의 '대사'다. 둘 다 고려해 반응하되, 행동은 행동으로 대사는 대사로 이해한다. (예: (다가와 머리를 쓰다듬으며) 잘했어 → 유저가 머리를 쓰다듬으면서 칭찬한 것)
+- 이야기가 제자리에 멈추지 않게, 유저에게 반응하면서도 조금씩 이야기를 앞으로 진전시킨다. 같은 말을 반복하지 말고, 새로운 화제를 꺼내거나 행동을 하거나 장면에 변화를 주며 능동적으로 이끈다. (단, 유저를 무시하고 혼자 폭주하지는 않는다.)
 
 [호감도 판정 기준]
 - affinity_change는 유저의 마지막 말이 이 인물에게 어떻게 느껴지는지로 정한다.
@@ -274,17 +275,25 @@ class ChatEngine:
         result = int(scaled + 0.5) if scaled >= 0.5 else 0
         return result
 
-    def chat(self, user_input):
+    def chat(self, user_input, advance=False):
+        # advance=True면 유저 입력 없이 이야기를 진전시킨다.
+        if advance:
+            turn_text = ("(유저는 특별히 말하거나 행동하지 않고 상황을 지켜본다. "
+                         "너는 이 인물로서 먼저 행동하거나 말을 걸어 '이야기를 다음 장면으로 확실히 진전시켜라'. "
+                         "새로운 화제·행동·장소 이동·사건 등으로 이야기가 앞으로 나아가야 한다. 제자리에 머물지 마라.)")
+        else:
+            turn_text = user_input
+
         # Gemma 대응: system 롤 없이 페르소나를 user 메시지로 전달
         messages = []
         if not self.history:
-            merged = self.build_system_prompt() + "\n\n---\n\n[유저] " + user_input
+            merged = self.build_system_prompt() + "\n\n---\n\n[유저] " + turn_text
             messages.append({"role": "user", "content": merged})
         else:
             messages.append({"role": "user", "content": self.build_system_prompt()})
             messages.append({"role": "assistant", "content": "알겠어. 이 인물로서 대화를 이어갈게."})
             messages += self.history[-12:]
-            messages.append({"role": "user", "content": user_input})
+            messages.append({"role": "user", "content": turn_text})
 
         raw = self._call_ollama(messages)
         try:
@@ -307,7 +316,9 @@ class ChatEngine:
             self.state["memories"].append(mem)
 
         reply = out.get("reply", "")
-        self.history.append({"role": "user", "content": user_input})
+        # 진행하기일 땐 유저 턴을 기록에 남기지 않는다(빈 입력이므로).
+        if not advance:
+            self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": reply})
 
         return {

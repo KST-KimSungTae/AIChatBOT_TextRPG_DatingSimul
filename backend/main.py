@@ -103,6 +103,17 @@ def chat(char_id: str, req: ChatRequest):
     return result
 
 
+@app.post("/api/chat/{char_id}/advance")
+def chat_advance(char_id: str):
+    """유저 입력 없이 이야기를 다음으로 진전시킨다('진행하기')."""
+    engine = get_session(char_id)
+    if not engine:
+        raise HTTPException(404, "캐릭터를 찾을 수 없어.")
+    result = engine.chat("", advance=True)
+    store.save_session(char_id, engine.export_session())
+    return result
+
+
 @app.get("/api/chat/{char_id}/state")
 def chat_state(char_id: str):
     engine = get_session(char_id)

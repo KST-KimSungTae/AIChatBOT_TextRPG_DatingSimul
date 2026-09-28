@@ -280,6 +280,11 @@ body {
   border-color: var(--ember-dim);
 }
 
+.composer__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
 .composer__send {
   background: var(--ember);
   color: #201608;
@@ -291,9 +296,24 @@ body {
   font-size: 0.9rem;
   cursor: pointer;
   transition: filter 0.15s;
+  flex: 1;
 }
 .composer__send:hover { filter: brightness(1.08); }
 .composer__send:disabled { opacity: 0.5; cursor: default; }
+.composer__advance {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.4rem 1.2rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.composer__advance:hover { color: var(--ember); border-color: var(--ember-dim); }
+.composer__advance:disabled { opacity: 0.5; cursor: default; }
 
 /* ── 전지적 패널 ────────────────────────────────── */
 .panel {
