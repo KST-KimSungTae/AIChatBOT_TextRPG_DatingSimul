@@ -7,7 +7,10 @@
 """
 
 import json
+import re
 import urllib.request
+
+from settings_def import default_settings, settings_to_prompt, length_num_predict
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = "huihui_ai/gemma-4-abliterated:12b-qat"
@@ -34,8 +37,10 @@ class ChatEngine:
                 "memories": list(saved_session.get("memories", [])),
             }
             self.history = list(saved_session.get("history", []))
+            self.settings = saved_session.get("settings") or default_settings()
             return
 
+        self.settings = default_settings()
         # 저장된 게 없으면(새 대화) 초기 상태를 세팅한다.
         try:
             start = int(character.get("initial_affinity", 30))
@@ -69,7 +74,14 @@ class ChatEngine:
             "mood": self.state["mood"],
             "memories": self.state["memories"],
             "history": self.history,
+            "settings": self.settings,
         }
+
+    def update_settings(self, settings):
+        """유저가 슬라이더로 바꾼 대화 설정을 반영한다."""
+        if isinstance(settings, dict):
+            self.settings = {**default_settings(), **settings}
+        return self.settings
 
     @classmethod
     def scan_initial_state(cls, character, player=None):
@@ -152,6 +164,7 @@ class ChatEngine:
         voice_text = "\n".join(f'- "{v}"' for v in voice) or "- (없음)"
         mood_list = ", ".join(self.moods)
         address = c.get("address_term") or "너"
+        settings_block = settings_to_prompt(getattr(self, "settings", None))
 
         # 인물 설정 블록 (있는 항목만)
         info = ""
@@ -199,11 +212,12 @@ class ChatEngine:
 - 설정된 말투를 일관되게 유지한다. 유저가 다른 말투를 써도 끌려가지 않는다.
 
 [대화 규칙]
-- reply는 반드시 유저의 '마지막 말'에 직접 반응하는 내용으로 시작한다. 방금 한 말을 무시하고 설정이나 배경을 혼자 읊지 않는다.
+- reply는 유저의 마지막 말만 단순히 받아치는 게 아니라, '지금까지의 대화 흐름·관계·분위기·기억'을 종합해 이 인물답게 자연스럽게 반응한다. 유저의 마지막 말을 무시하지는 않되, 거기에만 얽매이지 말고 맥락 전체를 읽고 살아있는 사람처럼 반응한다.
 - 유저 입력에서 괄호 '( )' 안은 유저의 '행동·상황' 묘사이고, 괄호 밖은 유저의 '대사'다. 둘 다 고려해 반응하되, 행동은 행동으로 대사는 대사로 이해한다. (예: (다가와 머리를 쓰다듬으며) 잘했어 → 유저가 머리를 쓰다듬으면서 칭찬한 것)
-- 이야기가 제자리에 멈추지 않게, 유저에게 반응하면서도 조금씩 이야기를 앞으로 진전시킨다. 같은 말을 반복하지 말고, 새로운 화제를 꺼내거나 행동을 하거나 장면에 변화를 주며 능동적으로 이끈다. (단, 유저를 무시하고 혼자 폭주하지는 않는다.)
-- 한 응답에서는 '하나의 장면·행동'만 다룬다. 시간을 크게 건너뛰거나 여러 장소를 연달아 이동하지 마라. (나쁜 예: 침대에서 일어나 → 세수하고 → 옷 갈아입고 → 집을 나서 → 카페에 도착. 좋은 예: 침대 옆으로 다가와 깨우는 그 순간까지만.) 다음 장면은 유저의 다음 입력이나 '진행하기'를 기다린다.
-- reply는 짧고 생생하게. 2~4문장 정도로, 지금 이 순간의 행동과 대사에 집중한다. 길게 늘어놓지 않는다.
+- 여러 장소를 순간이동하듯 건너뛰거나 시간을 크게 점프하지는 마라.
+
+[진행 방식 — 유저 설정]
+{settings_block}
 
 [호감도 판정 기준]
 - affinity_change는 유저의 마지막 말이 이 인물에게 어떻게 느껴지는지로 정한다.
@@ -226,13 +240,16 @@ class ChatEngine:
   "new_memory": "이번 대화에서 기억할 사실 한 가지. 없으면 빈 문자열"
 }}"""
 
-    def _call_ollama(self, messages):
+    def _call_ollama(self, messages, num_predict=None):
+        options = {"temperature": 0.8}
+        if num_predict:
+            options["num_predict"] = num_predict   # 길이 설정에 따른 넉넉한 상한(자르는 게 아님)
         body = {
             "model": MODEL,
             "messages": messages,
             "stream": False,
             "format": "json",
-            "options": {"temperature": 0.8},
+            "options": options,
         }
         req = urllib.request.Request(
             OLLAMA_URL,
@@ -251,6 +268,46 @@ class ChatEngine:
         if start != -1 and end != -1 and end > start:
             return text[start:end + 1]
         return text
+
+    def _parse_response(self, raw):
+        """모델 응답을 파싱한다. JSON이 깨져도 최대한 내용을 건져낸다.
+        긴 응답에서 따옴표·줄바꿈 때문에 json.loads가 실패하는 경우를 대비."""
+        default = {"reply": "", "mood": self.state["mood"],
+                   "affinity_change": 0, "special": False, "new_memory": ""}
+        # 1차: 정상 JSON 파싱
+        try:
+            data = json.loads(self._extract_json(raw))
+            if isinstance(data, dict):
+                return {**default, **data}
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # 2차: JSON이 깨졌으면 필드를 정규식으로 하나씩 건져낸다
+        print("[파싱 실패] 원문 일부:", repr(raw[:400]), flush=True)
+        result = dict(default)
+        # reply: "..." 부분 추출 (줄바꿈 포함, 다음 필드 앞까지)
+        m = re.search(r'"reply"\s*:\s*"(.*?)"\s*,\s*"(?:mood|affinity_change|special|new_memory)"',
+                      raw, re.DOTALL)
+        if m:
+            result["reply"] = m.group(1).replace('\\"', '"').replace("\\n", "\n").strip()
+        m = re.search(r'"mood"\s*:\s*"([^"]*)"', raw)
+        if m and m.group(1) in self.moods:
+            result["mood"] = m.group(1)
+        m = re.search(r'"affinity_change"\s*:\s*(-?\d+)', raw)
+        if m:
+            result["affinity_change"] = int(m.group(1))
+        m = re.search(r'"special"\s*:\s*(true|false)', raw)
+        if m:
+            result["special"] = (m.group(1) == "true")
+        m = re.search(r'"new_memory"\s*:\s*"([^"]*)"', raw)
+        if m:
+            result["new_memory"] = m.group(1)
+
+        # 그래도 reply가 비면, 최후 수단으로 JSON 껍데기를 벗긴 원문을 대사로
+        if not result["reply"].strip():
+            stripped = re.sub(r'[{}"]|"\w+"\s*:', "", raw).strip()
+            result["reply"] = stripped[:500] if stripped else ""
+        return result
 
     def _apply_affinity_curve(self, delta, special):
         """호감도 변화에 감쇠 곡선을 적용한다.
@@ -298,12 +355,12 @@ class ChatEngine:
             messages += self.history[-12:]
             messages.append({"role": "user", "content": turn_text})
 
-        raw = self._call_ollama(messages)
-        try:
-            out = json.loads(self._extract_json(raw))
-        except json.JSONDecodeError:
-            out = {"reply": raw, "mood": self.state["mood"],
-                   "affinity_change": 0, "new_memory": ""}
+        # 길이 설정에 따라 생성 토큰 상한을 넉넉히 준다.
+        npredict = length_num_predict(getattr(self, "settings", None))
+        # 진단 로그: 지금 적용된 설정이 터미널에 찍힘 (문제 확인용)
+        print(f"[설정 적용] {getattr(self, 'settings', None)}  num_predict={npredict}", flush=True)
+        raw = self._call_ollama(messages, num_predict=npredict)
+        out = self._parse_response(raw)
 
         try:
             delta = int(out.get("affinity_change", 0))

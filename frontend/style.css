@@ -463,3 +463,102 @@ body {
   font-size: 1.4rem;
   color: var(--ember);
 }
+
+/* ── 헤더 액션 버튼들 ─────────────────────────── */
+.stage__actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+
+/* ── 설정 모달 ────────────────────────────────── */
+.modal[hidden] { display: none !important; }
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 11, 15, 0.85);
+  display: grid;
+  place-items: center;
+  z-index: 90;
+  backdrop-filter: blur(3px);
+  padding: 1rem;
+}
+.modal__box {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 440px;
+}
+.modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.modal__title { font-family: "Noto Serif KR", serif; font-size: 1.2rem; }
+.modal__close {
+  background: transparent; border: none; color: var(--muted);
+  font-size: 1rem; cursor: pointer; padding: 0.2rem 0.4rem;
+}
+.modal__close:hover { color: var(--ink); }
+.modal__desc { font-size: 0.82rem; color: var(--muted); margin-bottom: 1.3rem; }
+
+/* 슬라이더 필드 */
+.settings-fields { display: flex; flex-direction: column; gap: 1.4rem; }
+.setting { display: flex; flex-direction: column; gap: 0.5rem; }
+.setting__label {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 0.9rem;
+}
+.setting__label .setting__name { color: var(--ink); font-weight: 500; }
+.setting__label .setting__val { color: var(--ember); font-size: 0.82rem; }
+.setting__slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 5px; border-radius: 999px;
+  background: var(--surface-2); outline: none; cursor: pointer;
+}
+.setting__slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--ember); cursor: pointer; border: none;
+}
+.setting__slider::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--ember); cursor: pointer; border: none;
+}
+.setting__ends {
+  display: flex; justify-content: space-between;
+  font-size: 0.72rem; color: var(--muted);
+}
+
+/* ── 스크롤바 디자인 (앱 테마에 맞춰 얇고 은은하게) ── */
+* {
+  scrollbar-width: thin;                       /* Firefox */
+  scrollbar-color: var(--line) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--surface-2);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--ember-dim); background-clip: padding-box; }
+
+/* ── 기억 패널: 항상 펼침, 오래된 것만 토글 ────── */
+.memories { border-top: 1px solid var(--line); padding-top: 1rem; }
+.memories__toggle {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.3rem 0;
+  margin: 0.4rem 0;
+  text-align: left;
+  width: 100%;
+  transition: color 0.15s;
+}
+.memories__toggle:hover { color: var(--ember); }
+.memories__list[hidden] { display: none; }
+#memoriesOlder li { opacity: 0.75; }

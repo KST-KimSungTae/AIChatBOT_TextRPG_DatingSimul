@@ -8,7 +8,9 @@ function showView(name) {
 }
 
 let SCHEMA = null;      // {character:[...], player:[...]}
+let SETTINGS_DEF = null; // 슬라이더 정의
 let currentCharId = null;
+let currentSettings = {}; // 현재 캐릭터의 대화 설정
 
 // 새 캐릭터 폼을 열 때 미리 채워둘 기본값(유리). 이름만 바꿔 저장하면 편하다.
 const DEFAULT_CHARACTER = {
@@ -202,7 +204,9 @@ async function openChat(charId) {
     $("charName").textContent = c.name || "캐릭터";
     $("scene").textContent = c.scene || "";
     $("memTitle").textContent = (c.name || "캐릭터") + "가 기억하는 것";
+    $("memTitle").dataset.base = (c.name || "캐릭터") + "가 기억하는 것";
     document.title = c.name || "캐릭터 챗";
+    currentSettings = data.settings || {};
     renderState(data);
     // 저장된 대화 기록 복원 (뒤로 갔다 와도, 서버를 껐다 켜도 유지)
     if (data.history && data.history.length) {
@@ -222,18 +226,50 @@ function renderState(s) {
   $("affinityFill").style.backgroundColor = affinityColor(s.affinity);
   $("mood").textContent = s.mood;
   const memEl = $("memories");
+  const olderEl = $("memoriesOlder");
+  const toggleBtn = $("memToggle");
   memEl.innerHTML = "";
-  if (!s.memories || s.memories.length === 0) {
+  olderEl.innerHTML = "";
+  const mems = s.memories || [];
+  const RECENT = 10;
+
+  if (mems.length === 0) {
     const li = document.createElement("li");
     li.className = "memories__empty";
     li.textContent = "아직 기억하는 게 없어.";
     memEl.appendChild(li);
+    olderEl.hidden = true;
+    toggleBtn.hidden = true;
   } else {
-    for (const m of s.memories) {
+    // 최근 10개는 항상 표시 (최신부터)
+    const recent = mems.slice(-RECENT).reverse();
+    for (const m of recent) {
       const li = document.createElement("li");
       li.textContent = m;
       memEl.appendChild(li);
     }
+    // 그보다 오래된 것들은 토글 버튼으로 여닫기
+    const older = mems.slice(0, Math.max(0, mems.length - RECENT)).reverse();
+    if (older.length > 0) {
+      for (const m of older) {
+        const li = document.createElement("li");
+        li.textContent = m;
+        olderEl.appendChild(li);
+      }
+      toggleBtn.hidden = false;
+      const isOpen = !olderEl.hidden;
+      toggleBtn.textContent = (isOpen ? "▾ 오래된 기억 숨기기" : `▸ 그 외 ${older.length}개 더 보기`);
+    } else {
+      toggleBtn.hidden = true;
+      olderEl.hidden = true;
+    }
+  }
+  // 제목에 총 개수
+  const memTitle = $("memTitle");
+  if (memTitle) {
+    const base = memTitle.dataset.base || memTitle.textContent.replace(/\s*\(\d+\)$/, "");
+    memTitle.dataset.base = base;
+    memTitle.textContent = mems.length ? `${base} (${mems.length})` : base;
   }
 }
 
@@ -318,6 +354,53 @@ async function advance() {
   }
 }
 
+// ── 대화 설정 모달 ────────────────────────────
+function openSettings() {
+  const wrap = $("settingsFields");
+  wrap.innerHTML = "";
+  for (const def of SETTINGS_DEF) {
+    const cur = currentSettings[def.key] ?? def.default;
+    const field = document.createElement("div");
+    field.className = "setting";
+    field.innerHTML = `
+      <div class="setting__label">
+        <span class="setting__name">${def.label}</span>
+        <span class="setting__val" id="sv_${def.key}"></span>
+      </div>
+      <input class="setting__slider" type="range" id="ss_${def.key}"
+             min="${def.min}" max="${def.max}" step="1" value="${cur}">
+      <div class="setting__ends"><span>${def.low_label}</span><span>${def.high_label}</span></div>`;
+    wrap.appendChild(field);
+
+    const slider = field.querySelector(`#ss_${def.key}`);
+    const valEl = field.querySelector(`#sv_${def.key}`);
+    const showVal = () => { valEl.textContent = `${slider.value} / ${def.max}`; };
+    showVal();
+    // 슬라이더를 놓으면 저장
+    slider.addEventListener("input", showVal);
+    slider.addEventListener("change", saveSettings);
+  }
+  $("settingsModal").hidden = false;
+}
+
+function closeSettings() { $("settingsModal").hidden = true; }
+
+async function saveSettings() {
+  const settings = {};
+  for (const def of SETTINGS_DEF) {
+    const slider = $(`ss_${def.key}`);
+    if (slider) settings[def.key] = Number(slider.value);
+  }
+  currentSettings = settings;
+  try {
+    await fetch(`/api/chat/${currentCharId}/settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ settings }),
+    });
+  } catch (e) { /* 저장 실패해도 다음 대화에 반영 시도 */ }
+}
+
 function escapeHtml(s) {
   return (s || "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -339,6 +422,18 @@ $("composer").addEventListener("submit", (e) => {
   if (action || dialogue) send(action, dialogue);
 });
 $("advanceBtn").addEventListener("click", advance);
+$("memToggle").addEventListener("click", () => {
+  const olderEl = $("memoriesOlder");
+  olderEl.hidden = !olderEl.hidden;
+  const btn = $("memToggle");
+  const count = olderEl.children.length;
+  btn.textContent = olderEl.hidden ? `▸ 그 외 ${count}개 더 보기` : "▾ 오래된 기억 숨기기";
+});
+$("settingsBtn").addEventListener("click", openSettings);
+$("settingsClose").addEventListener("click", closeSettings);
+$("settingsModal").addEventListener("click", (e) => {
+  if (e.target === $("settingsModal")) closeSettings();  // 바깥 클릭 시 닫기
+});
 
 // ── 시작 ──────────────────────────────────────
 async function init() {
@@ -347,6 +442,8 @@ async function init() {
   try {
     const res = await fetch("/api/schema");
     SCHEMA = await res.json();
+    const sres = await fetch("/api/settings-def");
+    SETTINGS_DEF = await sres.json();
     await loadList();
   } catch (e) {
     console.error("초기화 실패:", e);

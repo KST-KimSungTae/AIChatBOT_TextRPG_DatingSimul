@@ -57,7 +57,10 @@
             </div>
             <p class="scene" id="scene"></p>
           </div>
-          <button class="reset" id="resetBtn" title="처음부터 다시">처음부터</button>
+          <div class="stage__actions">
+            <button class="reset" id="settingsBtn" title="대화 설정">⚙ 설정</button>
+            <button class="reset" id="resetBtn" title="처음부터 다시">처음부터</button>
+          </div>
         </header>
         <div class="log" id="log"></div>
         <form class="composer" id="composer" autocomplete="off">
@@ -85,8 +88,10 @@
           <span class="mood__label">기분</span>
           <span class="mood__value" id="mood">—</span>
         </section>
-        <section class="memories">
+        <section class="memories" id="memoriesBox">
           <h2 class="memories__title" id="memTitle">기억하는 것</h2>
+          <ul class="memories__list" id="memoriesOlder" hidden></ul>
+          <button class="memories__toggle" id="memToggle" type="button" hidden></button>
           <ul class="memories__list" id="memories">
             <li class="memories__empty">아직 기억하는 게 없어.</li>
           </ul>
@@ -102,6 +107,18 @@
       <h2 class="overlay__title">캐릭터를 준비하는 중…</h2>
       <p class="overlay__desc">성격과 상황을 분석해 첫 감정을 잡고 있어.<br>보통 10~30초 정도 걸려.</p>
       <div class="overlay__timer" id="overlayTimer">0초</div>
+    </div>
+  </div>
+
+  <!-- 대화 설정 패널 (모달) -->
+  <div class="modal" id="settingsModal" hidden>
+    <div class="modal__box">
+      <div class="modal__head">
+        <h2 class="modal__title">대화 설정</h2>
+        <button class="modal__close" id="settingsClose">✕</button>
+      </div>
+      <p class="modal__desc">이 캐릭터와의 대화 방식을 조절해. 바로 저장돼.</p>
+      <div id="settingsFields" class="settings-fields"></div>
     </div>
   </div>
 

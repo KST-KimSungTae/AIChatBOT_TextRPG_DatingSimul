@@ -28,6 +28,7 @@ from pydantic import BaseModel
 import store
 from schema import CHARACTER_SCHEMA, PLAYER_SCHEMA
 from engine import ChatEngine
+from settings_def import SETTINGS_DEF
 
 app = FastAPI(title="Character Chatbot")
 
@@ -124,8 +125,29 @@ def chat_state(char_id: str):
         "mood": engine.state["mood"],
         "memories": engine.state["memories"],
         "history": engine.history,          # 뒤로 갔다 와도 대화 복원되도록
+        "settings": engine.settings,        # 현재 대화 설정(슬라이더 값)
         "character": engine.char,
     }
+
+
+@app.get("/api/settings-def")
+def settings_def():
+    """슬라이더 정의(프론트가 설정 패널을 자동 생성)."""
+    return SETTINGS_DEF
+
+
+class SettingsPayload(BaseModel):
+    settings: dict
+
+
+@app.post("/api/chat/{char_id}/settings")
+def update_settings(char_id: str, payload: SettingsPayload):
+    engine = get_session(char_id)
+    if not engine:
+        raise HTTPException(404, "캐릭터를 찾을 수 없어.")
+    engine.update_settings(payload.settings)
+    store.save_session(char_id, engine.export_session())
+    return {"settings": engine.settings}
 
 
 @app.post("/api/chat/{char_id}/reset")
