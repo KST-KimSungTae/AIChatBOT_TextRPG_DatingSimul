@@ -238,6 +238,10 @@ function renderState(s) {
 }
 
 function addMessage(text, who) {
+  // 캐릭터 응답이 비어 오면(모델 문제) 빈 말풍선 대신 안내를 띄운다.
+  if (who === "char" && (!text || !text.trim())) {
+    text = "(…응답이 비어서 왔어. '진행하기'나 다시 말을 걸어봐.)";
+  }
   const div = document.createElement("div");
   div.className = "msg msg--" + who;
   div.textContent = text;
