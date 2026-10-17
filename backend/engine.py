@@ -252,7 +252,8 @@ class ChatEngine:
     def build_system_prompt(self):
         c = self.char
         name = c.get("name", "캐릭터")
-        mem_text = "\n".join(f"- {m}" for m in self.state["memories"]) or "- (아직 없음)"
+        # 기억은 최근 15개만 프롬프트에 주입(입력 비대화 → 빈 응답 방지). 전체는 패널에 그대로 유지.
+        mem_text = "\n".join(f"- {m}" for m in self.state["memories"][-15:]) or "- (아직 없음)"
         voice = c.get("voice_examples") or []
         voice_text = "\n".join(f'- "{v}"' for v in voice) or "- (없음)"
         mood_list = ", ".join(self.moods)
@@ -515,7 +516,7 @@ class ChatEngine:
         else:
             messages.append({"role": "user", "content": self.build_system_prompt()})
             messages.append({"role": "assistant", "content": "알겠어. 이 인물로서 대화를 이어갈게."})
-            messages += self.history[-12:]
+            messages += self.history[-8:]
             messages.append({"role": "user", "content": turn_text})
 
         # 길이 설정에 따라 생성 토큰 상한을 넉넉히 준다.

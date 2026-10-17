@@ -198,14 +198,17 @@ body {
   gap: 1.1rem;
 }
 
-.msg { max-width: 78%; line-height: 1.6; }
+.msg {
+  max-width: 80%;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;             /* 지문/대사 조각 사이 숨 쉴 틈 */
+}
 
-/* 세라: 소설체(명조), 왼쪽, 말풍선 없이 지문처럼 */
+/* 캐릭터: 왼쪽, 말풍선 없이 소설처럼 흐르게 */
 .msg--char {
   align-self: flex-start;
-  font-family: "Noto Serif KR", serif;
-  font-size: 1rem;
-  color: var(--ink);
   padding-left: 0.9rem;
   border-left: 2px solid var(--ember-dim);
 }
@@ -214,10 +217,32 @@ body {
 .msg--user {
   align-self: flex-end;
   background: var(--user);
-  color: var(--ink);
   padding: 0.6rem 0.9rem;
   border-radius: 14px 14px 4px 14px;
-  font-size: 0.92rem;
+}
+
+/* ── 대사 / 지문 조각 ───────────────────────────── */
+.seg { display: block; }
+
+/* 지문(행동·상황): 흐리고 작은 이탤릭 — 무대 지시문처럼 */
+.seg--narration {
+  font-family: "Noto Sans KR", sans-serif;
+  font-style: italic;
+  font-size: 0.86rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+/* 대사: 또렷한 명조체로 — 말이 눈에 들어오게 */
+.msg--char .seg--dialogue {
+  font-family: "Noto Serif KR", serif;
+  font-size: 1.02rem;
+  color: var(--ink);
+}
+/* 사용자 말풍선 안의 대사는 담백하게 */
+.msg--user .seg--dialogue {
+  font-size: 0.94rem;
+  color: var(--ink);
 }
 
 /* 세라가 생각 중일 때 */

@@ -302,6 +302,32 @@ function renderState(s) {
   }
 }
 
+// 대사/지문 분리: 괄호 '( )' 안은 지문(행동·상황), 밖은 대사.
+// 각각 다른 스타일의 조각으로 쪼개 캐릭터챗처럼 또렷하게 보여준다.
+function appendSegments(container, text) {
+  const parts = text.split(/(\([^)]*\))/g);
+  for (let part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const seg = document.createElement("span");
+    if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+      seg.className = "seg seg--narration";
+      seg.textContent = trimmed.slice(1, -1).trim();   // 괄호 벗겨 지문으로
+    } else {
+      seg.className = "seg seg--dialogue";
+      seg.textContent = trimmed;
+    }
+    container.appendChild(seg);
+  }
+  // 조각이 하나도 안 잡히면(이상한 경우) 원문 그대로
+  if (!container.childNodes.length) {
+    const seg = document.createElement("span");
+    seg.className = "seg seg--dialogue";
+    seg.textContent = text;
+    container.appendChild(seg);
+  }
+}
+
 function addMessage(text, who) {
   // 캐릭터 응답이 비어 오면(모델 문제) 빈 말풍선 대신 안내를 띄운다.
   if (who === "char" && (!text || !text.trim())) {
@@ -309,7 +335,7 @@ function addMessage(text, who) {
   }
   const div = document.createElement("div");
   div.className = "msg msg--" + who;
-  div.textContent = text;
+  appendSegments(div, text);
   $("log").appendChild(div);
   $("log").scrollTop = $("log").scrollHeight;
 }
