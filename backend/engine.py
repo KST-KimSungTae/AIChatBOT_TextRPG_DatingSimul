@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-대화 엔진. 이제 특정 캐릭터에 고정되지 않고, 어떤 캐릭터/플레이어 설정이든 받아서 동작한다.
+대화 엔진. 어떤 캐릭터/플레이어 설정이든 받아서 동작한다.
 - 캐릭터 dict + 플레이어 dict로 페르소나 프롬프트를 조립
-- Ollama(Gemma) 호출, 호감도/기분/기억 상태 관리
-캐릭터별로 ChatEngine 인스턴스를 하나씩 두면 세션이 분리된다(main.py가 관리).
+- Ollama(Gemma) 호출, 호감도/신뢰도/기분/기억 상태 관리
+- 상한 해방: AI 판정 없이 '정답 대사'와 코드 문자열 일치로만 판정 (대화 중 추가 LLM 호출 0)
+
+'상한 해방 전 안정 베이스'를 기준으로, 추가 LLM 호출 없이
+상한 해방·정답 대사·힌트 마스킹·신뢰도를 다시 얹은 버전.
+→ 매 턴 Ollama 호출은 1번(본 응답)뿐. 생성 시에만 2번(오프닝 + 정답 대사).
 """
 
 import json
@@ -33,14 +37,17 @@ class ChatEngine:
         if saved_session:
             self.state = {
                 "affinity": saved_session.get("affinity", 30),
+                "trust": saved_session.get("trust", 0),
                 "mood": saved_session.get("mood") or self.moods[0],
                 "memories": list(saved_session.get("memories", [])),
             }
             self.history = list(saved_session.get("history", []))
             self.settings = saved_session.get("settings") or default_settings()
+            self.unlock = saved_session.get("unlock") or self._default_unlock()
             return
 
         self.settings = default_settings()
+        self.unlock = self._default_unlock()
         # 저장된 게 없으면(새 대화) 초기 상태를 세팅한다.
         try:
             start = int(character.get("initial_affinity", 30))
@@ -48,12 +55,15 @@ class ChatEngine:
             start = 30
         start = max(0, min(100, start))
 
-        # 초기 기분·오프닝: 캐릭터에 이미 저장돼 있으면(생성 시 계산됨) 그대로 읽어 즉시 시작한다.
+        # 초기 기분·오프닝·정답 대사: 캐릭터에 이미 저장돼 있으면(생성 시 계산됨) 그대로 읽는다.
         saved = character.get("initial_state") or {}
         saved_mood = saved.get("mood")
         saved_opening = saved.get("opening")
+        if saved.get("unlock"):
+            self.unlock = {**self._default_unlock(), **saved["unlock"]}
         self.state = {
             "affinity": start,
+            "trust": 0,
             "mood": saved_mood if saved_mood in self.moods else None,
             "memories": [],
         }
@@ -67,14 +77,28 @@ class ChatEngine:
         if saved_opening:
             self.history.append({"role": "assistant", "content": saved_opening})
 
+    # ── 상한 해방(unlock) 기본값/유틸 ─────────────────
+    @staticmethod
+    def _default_unlock():
+        # answer: 해방시키는 '정답 대사'(코드로 문자열 일치 판정). cap: 현재 상한. unlocked: 해방 여부.
+        # answer가 없으면 cap은 100(제한 없음)으로 둔다.
+        return {"answer": "", "cap": 100, "unlocked": False}
+
+    @staticmethod
+    def _normalize(text):
+        """정답 대사 비교용 정규화: 공백·문장부호 제거, 소문자화(띄어쓰기·마침표 차이 무시)."""
+        return re.sub(r"[\s!?.,~…'\"]+", "", (text or "")).lower()
+
     def export_session(self):
         """현재 진행 상태를 저장용 dict로 반환."""
         return {
             "affinity": self.state["affinity"],
+            "trust": self.state.get("trust", 0),
             "mood": self.state["mood"],
             "memories": self.state["memories"],
             "history": self.history,
             "settings": self.settings,
+            "unlock": self.unlock,
         }
 
     def update_settings(self, settings):
@@ -83,10 +107,47 @@ class ChatEngine:
             self.settings = {**default_settings(), **settings}
         return self.settings
 
+    def public_unlock(self):
+        """프론트에 보낼 unlock 정보. 정답 대사를 ●로 가리되 '띄어쓰기는 그대로' 둔다.
+        공개 경로 2개: 호감도로 최대 60%까지 + 신뢰도로 나머지 40%까지(신뢰도 100이면 전부)."""
+        u = self.unlock
+        answer = u.get("answer", "") or ""
+        unlocked = u.get("unlocked", False)
+
+        char_idxs = [i for i, ch in enumerate(answer) if not ch.isspace()]
+        total = len(char_idxs)
+        if unlocked:
+            n = total                          # 해방되면 전체 공개
+        else:
+            aff = self.state["affinity"]
+            trust = self.state.get("trust", 0)
+            cap = u.get("cap", 100) or 100
+            aff_reveal = min(0.6, (aff / cap) * 0.6)     # 호감도: 0~60% 담당
+            trust_reveal = (trust / 100) * 0.4           # 신뢰도: 나머지 40% 담당
+            frac = min(1.0, aff_reveal + trust_reveal)
+            n = int(total * frac)
+
+        reveal_set = set(char_idxs[:n])
+        masked = []
+        for i, ch in enumerate(answer):
+            if ch.isspace():
+                masked.append(ch)              # 띄어쓰기는 그대로
+            elif i in reveal_set:
+                masked.append(ch)              # 공개된 글자
+            else:
+                masked.append("●")             # 가려진 글자
+        return {
+            "hint_masked": "".join(masked),
+            "has_hint": bool(answer),
+            "unlocked": unlocked,
+            "cap": u.get("cap", 100),
+        }
+
+    # ── 생성 시점 1회 스캔 (오프닝 + 정답 대사) ──────────
     @classmethod
     def scan_initial_state(cls, character, player=None):
-        """캐릭터 '생성 시점'에 딱 한 번 호출. AI로 초기 기분 + 오프닝 대사를 만들어 dict로 돌려준다.
-        이 결과를 캐릭터 JSON의 'initial_state'에 저장 → 이후 진입 때는 계산 없이 즉시 로드."""
+        """캐릭터 '생성 시점'에 딱 한 번 호출. AI로 초기 기분 + 오프닝 대사 + 정답 대사를 만든다.
+        결과를 캐릭터 JSON의 'initial_state'에 저장 → 이후 진입 때는 계산 없이 즉시 로드."""
         engine = cls.__new__(cls)          # __init__을 우회해 계산용으로만 생성
         engine.char = character
         engine.player = player or {}
@@ -96,7 +157,9 @@ class ChatEngine:
         except (ValueError, TypeError):
             aff = 30
         engine.state = {"affinity": max(0, min(100, aff))}
-        return engine._decide_opening()
+        result = engine._decide_opening()
+        result["unlock"] = engine._decide_unlock_answer()   # 상한 해방 '정답 대사'
+        return result
 
     def _decide_opening(self):
         """AI에게 '이 캐릭터가 이 장면에서 지금 어떤 기분이고, 먼저 뭐라고 말을 거는지'를 판단시킨다.
@@ -134,6 +197,36 @@ class ChatEngine:
             opening = (data.get("opening") or "").strip()
             if opening:
                 result["opening"] = opening
+        except Exception:
+            pass
+        return result
+
+    def _decide_unlock_answer(self):
+        """캐릭터마다 '정답 대사' 하나를 AI가 프로필 보고 생성한다(생성 때 1회뿐).
+        유저가 이 대사를 그대로 치면 호감도 상한이 해방된다. 판정은 코드로 문자열 일치 비교.
+        반환: {"answer": 정답 대사, "cap": 기본 상한, "unlocked": False}"""
+        c = self.char
+        prompt = f"""다음 인물에게는 '마음 깊은 곳에서 유저에게 가장 듣고 싶어하는 한 마디'가 있다.
+이 인물의 성격·배경·관계를 근거로, 유저가 그 말을 '그대로' 했을 때 이 인물이 마음을 완전히 여는,
+짧고 자연스러운 대사 한 문장을 만든다.
+
+[인물] {c.get('name','')}
+- 성격: {c.get('personality','')}
+- 배경: {c.get('background','')}
+- 유저와의 관계: {c.get('relationship','')}
+
+규칙:
+- answer는 유저(상대)가 이 인물에게 건네는 한 문장이다. 10~20자 내외로 짧고 명확하게.
+- 너무 길거나 복잡하지 않게, 유저가 따라 치기 쉬운 자연스러운 한 마디로. (예: "넌 내 동생이 아니라 여자야")
+- 반드시 한국어로만.
+
+반드시 아래 JSON 형식으로만 답한다.
+{{"answer": "정답이 되는 한 문장"}}"""
+        result = {"answer": "", "cap": 80, "unlocked": False}
+        try:
+            raw = self._call_ollama([{"role": "user", "content": prompt}])
+            data = json.loads(self._extract_json(raw))
+            result["answer"] = (data.get("answer") or "").strip()
         except Exception:
             pass
         return result
@@ -199,6 +292,7 @@ class ChatEngine:
 
 [현재 상태]
 - 유저에 대한 호감도: {self.state['affinity']}/100
+- 유저에 대한 신뢰도: {self.state.get('trust', 0)}/100
 - 지금 기분: {self.state['mood']}
 
 [언어 규칙 — 매우 중요]
@@ -226,6 +320,12 @@ class ChatEngine:
   진심 어린 고백, 오랜 오해가 풀림, 위기에서 지켜줌, 깊은 속마음을 처음 터놓음 같은 드문 순간만 true.
   평범한 칭찬·일상 대화·가벼운 호의는 반드시 false. special은 아주 드물게만 true여야 한다.
 
+[신뢰도 판정 기준]
+- trust_change는 유저의 말이 이 인물의 '믿음'을 쌓았는지 깼는지로 정한다. 호감(좋아함)과는 다르다.
+- 호감도보다 훨씬 느리고 무겁게 움직인다. 웬만한 칭찬·호감 표현으로는 거의 안 오른다(대부분 0).
+- 상승(+1~+3, 드물게): 약속을 지킴, 비밀을 지켜줌, 고민·불안을 진지하게 받아줌, 일관된 태도, 아픈 과거를 존중함.
+- 하락(-1~-5): 거짓말 들통, 말을 바꿈, 비밀을 떠벌림, 진심을 가볍게 취급, 싫다는 걸 계속함. (믿음이 깨지면 크게 내린다.)
+
 [기분(mood) 규칙]
 - mood는 반드시 다음 목록에서 '정확히 하나'만 고른다. 목록 밖의 단어, 이모지, 기호, 나열은 금지.
 - 가능한 mood: {mood_list}
@@ -236,6 +336,7 @@ class ChatEngine:
   "reply": "인물로서의 대사와 행동 묘사 (한국어). 유저의 마지막 말에 먼저 반응할 것",
   "mood": "위 목록 중 정확히 하나",
   "affinity_change": 이번 대화로 인한 호감도 변화 정수 (-5 에서 +5 사이),
+  "trust_change": 이번 대화로 인한 신뢰도 변화 정수 (-5 에서 +3 사이, 대부분 0),
   "special": 관계를 크게 진전시킬 특별한 순간이면 true, 아니면 false,
   "new_memory": "이번 대화에서 기억할 사실 한 가지. 없으면 빈 문자열"
 }}"""
@@ -250,15 +351,24 @@ class ChatEngine:
             "stream": False,
             "format": "json",
             "options": options,
+            "keep_alive": "30m",   # 모델을 30분간 메모리에 유지 → cold start·빈 응답 감소
         }
-        req = urllib.request.Request(
-            OLLAMA_URL,
-            data=json.dumps(body).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        return data["message"]["content"]
+        # 드물게 빈 응답이 올 때를 대비한 가벼운 안전망(1회만 재시도). 보통은 안 걸린다.
+        content = ""
+        for attempt in range(2):
+            req = urllib.request.Request(
+                OLLAMA_URL,
+                data=json.dumps(body).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            content = (data.get("message", {}).get("content") or "").strip()
+            if content:
+                return content
+            if attempt == 0:
+                print("[빈 응답 재시도 1회]", flush=True)
+        return content
 
     @staticmethod
     def _extract_json(text):
@@ -270,10 +380,10 @@ class ChatEngine:
         return text
 
     def _parse_response(self, raw):
-        """모델 응답을 파싱한다. JSON이 깨져도 최대한 내용을 건져낸다.
-        긴 응답에서 따옴표·줄바꿈 때문에 json.loads가 실패하는 경우를 대비."""
+        """모델 응답을 파싱한다. JSON이 깨져도 최대한 내용을 건져낸다."""
         default = {"reply": "", "mood": self.state["mood"],
-                   "affinity_change": 0, "special": False, "new_memory": ""}
+                   "affinity_change": 0, "trust_change": 0,
+                   "special": False, "new_memory": ""}
         # 1차: 정상 JSON 파싱
         try:
             data = json.loads(self._extract_json(raw))
@@ -285,8 +395,7 @@ class ChatEngine:
         # 2차: JSON이 깨졌으면 필드를 정규식으로 하나씩 건져낸다
         print("[파싱 실패] 원문 일부:", repr(raw[:400]), flush=True)
         result = dict(default)
-        # reply: "..." 부분 추출 (줄바꿈 포함, 다음 필드 앞까지)
-        m = re.search(r'"reply"\s*:\s*"(.*?)"\s*,\s*"(?:mood|affinity_change|special|new_memory)"',
+        m = re.search(r'"reply"\s*:\s*"(.*?)"\s*,\s*"(?:mood|affinity_change|trust_change|special|new_memory)"',
                       raw, re.DOTALL)
         if m:
             result["reply"] = m.group(1).replace('\\"', '"').replace("\\n", "\n").strip()
@@ -296,6 +405,9 @@ class ChatEngine:
         m = re.search(r'"affinity_change"\s*:\s*(-?\d+)', raw)
         if m:
             result["affinity_change"] = int(m.group(1))
+        m = re.search(r'"trust_change"\s*:\s*(-?\d+)', raw)
+        if m:
+            result["trust_change"] = int(m.group(1))
         m = re.search(r'"special"\s*:\s*(true|false)', raw)
         if m:
             result["special"] = (m.group(1) == "true")
@@ -330,17 +442,16 @@ class ChatEngine:
             factor = 0.0        # 거의 안 오름 (special로만 가능)
 
         scaled = delta * factor
-        # 0보다 크면 올림해서 최소 0, 상승 의도가 있으면 감쇠 후에도 흐름은 남게
         result = int(scaled + 0.5) if scaled >= 0.5 else 0
         return result
 
     def chat(self, user_input, advance=False):
         # advance=True면 유저 입력 없이 이야기를 진전시킨다.
+        # 추상적 지시문 하나만 주면 Gemma가 빈 응답을 잘 뱉으므로,
+        # '유저가 가만히 있다'는 짧은 상황을 반응 대상으로 주고 진전 지시는 간결하게 덧붙인다.
         if advance:
-            turn_text = ("(유저는 특별히 말하거나 행동하지 않고 상황을 지켜본다. "
-                         "너는 이 인물로서 먼저 행동하거나 말을 걸어 이야기를 '딱 한 걸음만' 다음으로 진전시켜라. "
-                         "새로운 화제·행동·작은 변화 하나로 자연스럽게 이어가되, 시간을 크게 건너뛰거나 여러 장면을 몰아서 진행하지 마라. "
-                         "지금 이 순간의 다음 한 비트만 짧게 보여라.)")
+            turn_text = ("(가만히 너를 바라보며 다음을 기다린다) "
+                         "네가 먼저 말이나 행동으로 이야기를 딱 한 걸음만 자연스럽게 이끌어줘.")
         else:
             turn_text = user_input
 
@@ -357,18 +468,40 @@ class ChatEngine:
 
         # 길이 설정에 따라 생성 토큰 상한을 넉넉히 준다.
         npredict = length_num_predict(getattr(self, "settings", None))
-        # 진단 로그: 지금 적용된 설정이 터미널에 찍힘 (문제 확인용)
-        print(f"[설정 적용] {getattr(self, 'settings', None)}  num_predict={npredict}", flush=True)
         raw = self._call_ollama(messages, num_predict=npredict)
         out = self._parse_response(raw)
 
+        # 호감도
         try:
             delta = int(out.get("affinity_change", 0))
         except (ValueError, TypeError):
             delta = 0
         special = bool(out.get("special", False))
         delta = self._apply_affinity_curve(delta, special)
-        self.state["affinity"] = max(0, min(100, self.state["affinity"] + delta))
+
+        # 신뢰도(0~100). 느리게 움직이므로 곡선 없이 AI 판정값을 그대로 반영(안전 clamp).
+        try:
+            trust_delta = int(out.get("trust_change", 0))
+        except (ValueError, TypeError):
+            trust_delta = 0
+        trust_delta = max(-5, min(3, trust_delta))
+        self.state["trust"] = max(0, min(100, self.state.get("trust", 0) + trust_delta))
+
+        # 상한 해방: AI 호출 없이 '정답 대사'와 코드로 문자열 일치 비교(공백·문장부호 무시).
+        just_unlocked = False
+        answer = self.unlock.get("answer", "")
+        if (not advance and user_input.strip()
+                and answer and not self.unlock.get("unlocked")):
+            if self._normalize(user_input) == self._normalize(answer):
+                self.unlock["unlocked"] = True
+                self.unlock["cap"] = 100
+                just_unlocked = True
+                print("[상한 해방!] 정답 대사 일치", flush=True)
+
+        # 호감도 상한 적용: 해방 전에는 cap을 넘지 못한다.
+        cap = 100 if self.unlock.get("unlocked") else self.unlock.get("cap", 100)
+        self.state["affinity"] = max(0, min(cap, self.state["affinity"] + delta))
+
         new_mood = out.get("mood") or self.state["mood"]
         self.state["mood"] = new_mood if new_mood in self.moods else self.state["mood"]
         mem = (out.get("new_memory") or "").strip()
@@ -381,9 +514,14 @@ class ChatEngine:
             self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": reply})
 
-        return {
+        result = {
             "reply": reply,
             "affinity": self.state["affinity"],
+            "trust": self.state["trust"],
             "mood": self.state["mood"],
             "memories": self.state["memories"],
+            "unlock": self.public_unlock(),
         }
+        if just_unlocked:
+            result["just_unlocked"] = True
+        return result

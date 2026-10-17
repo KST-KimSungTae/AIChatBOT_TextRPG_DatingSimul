@@ -220,11 +220,38 @@ async function openChat(charId) {
   $("input").focus();
 }
 
+function showUnlockEffect() {
+  // 상한 해방 순간: 대화창에 특별한 안내 + 힌트 박스 강조
+  const div = document.createElement("div");
+  div.className = "unlock-flash";
+  div.textContent = "── 마음의 빗장이 풀렸다 ──";
+  $("log").appendChild(div);
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+function renderSecret(unlock) {
+  const box = $("secretBox");
+  if (!unlock || !unlock.has_hint) { box.hidden = true; return; }
+  box.hidden = false;
+  $("secretText").textContent = unlock.hint_masked || "";
+  if (unlock.unlocked) {
+    box.classList.add("secret--unlocked");
+    $("secretLabel").textContent = "마음을 열었다";
+  } else {
+    box.classList.remove("secret--unlocked");
+    $("secretLabel").textContent = "이 아이가 바라는 것…";
+  }
+}
+
 function renderState(s) {
   $("affinityValue").textContent = s.affinity;
   $("affinityFill").style.width = s.affinity + "%";
   $("affinityFill").style.backgroundColor = affinityColor(s.affinity);
+  const trust = s.trust ?? 0;
+  $("trustValue").textContent = trust;
+  $("trustFill").style.width = trust + "%";
   $("mood").textContent = s.mood;
+  renderSecret(s.unlock);
   const memEl = $("memories");
   const olderEl = $("memoriesOlder");
   const toggleBtn = $("memToggle");
@@ -318,6 +345,7 @@ async function send(action, dialogue) {
     typing.remove();
     addMessage(data.reply, "char");
     renderState(data);
+    if (data.just_unlocked) showUnlockEffect();
   } catch (e) {
     typing.remove();
     addMessage("(응답을 받지 못했어. 잠시 후 다시.)", "char");

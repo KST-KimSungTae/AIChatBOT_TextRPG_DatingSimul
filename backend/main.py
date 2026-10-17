@@ -122,10 +122,12 @@ def chat_state(char_id: str):
         raise HTTPException(404, "캐릭터를 찾을 수 없어.")
     return {
         "affinity": engine.state["affinity"],
+        "trust": engine.state.get("trust", 0),
         "mood": engine.state["mood"],
         "memories": engine.state["memories"],
         "history": engine.history,          # 뒤로 갔다 와도 대화 복원되도록
         "settings": engine.settings,        # 현재 대화 설정(슬라이더 값)
+        "unlock": engine.public_unlock(),   # 힌트(가림)·해방 여부
         "character": engine.char,
     }
 

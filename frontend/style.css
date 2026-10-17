@@ -562,3 +562,51 @@ body {
 .memories__toggle:hover { color: var(--ember); }
 .memories__list[hidden] { display: none; }
 #memoriesOlder li { opacity: 0.75; }
+
+/* ── 숨겨진 마음(힌트) — 초상 아래 ─────────────── */
+.secret {
+  margin-top: -0.5rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--surface-2);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  text-align: center;
+}
+.secret__label {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+.secret__text {
+  font-family: "Noto Serif KR", serif;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+/* 해방됐을 때 강조 */
+.secret.secret--unlocked {
+  border-color: var(--ember-dim);
+  background: linear-gradient(180deg, var(--surface-2), rgba(216,164,92,0.08));
+}
+.secret.secret--unlocked .secret__text { color: var(--ember); }
+.secret.secret--unlocked .secret__label { color: var(--ember-dim); }
+
+/* ── 상한 해방 연출 ───────────────────────────── */
+.unlock-flash {
+  align-self: center;
+  color: var(--ember);
+  font-family: "Noto Serif KR", serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  padding: 0.6rem 0;
+  animation: unlockGlow 2s ease;
+}
+@keyframes unlockGlow {
+  0% { opacity: 0; transform: scale(0.9); }
+  30% { opacity: 1; text-shadow: 0 0 12px rgba(216,164,92,0.6); }
+  100% { opacity: 1; text-shadow: none; }
+}
+
+/* ── 신뢰도 게이지 (호감도와 구분되는 차분한 청록) ── */
+.gauge__fill--trust { background: var(--rain) !important; }

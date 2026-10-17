@@ -80,9 +80,17 @@
         <div class="portrait" id="portrait" aria-hidden="true">
           <span class="portrait__hint">초상은 아직<br>그려지지 않았다</span>
         </div>
+        <div class="secret" id="secretBox" hidden>
+          <span class="secret__label" id="secretLabel">이 아이가 바라는 것…</span>
+          <span class="secret__text" id="secretText"></span>
+        </div>
         <section class="gauge">
           <div class="gauge__label"><span>호감도</span><span class="gauge__value" id="affinityValue">30</span></div>
           <div class="gauge__track"><div class="gauge__fill" id="affinityFill"></div></div>
+        </section>
+        <section class="gauge">
+          <div class="gauge__label"><span>신뢰도</span><span class="gauge__value" id="trustValue">0</span></div>
+          <div class="gauge__track"><div class="gauge__fill gauge__fill--trust" id="trustFill"></div></div>
         </section>
         <section class="mood">
           <span class="mood__label">기분</span>
