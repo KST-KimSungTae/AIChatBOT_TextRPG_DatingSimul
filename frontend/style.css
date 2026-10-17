@@ -635,3 +635,59 @@ body {
 
 /* ── 신뢰도 게이지 (호감도와 구분되는 차분한 청록) ── */
 .gauge__fill--trust { background: var(--rain) !important; }
+
+/* ── 초상 이미지/생성/로딩 ───────────────────────── */
+.portrait { position: relative; overflow: hidden; }
+.portrait__img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; display: block; }
+.portrait__empty {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.9rem; text-align: center;
+}
+.portrait__loading {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.8rem; background: rgba(10,11,15,0.7); backdrop-filter: blur(2px);
+}
+.portrait__timer { font-size: 0.78rem; color: var(--muted); }
+/* hidden이면 무조건 숨김 (display:flex/block이 hidden 속성을 이기는 문제 방지) */
+.portrait__img[hidden],
+.portrait__empty[hidden],
+.portrait__loading[hidden] { display: none !important; }
+.portrait__regen {
+  position: absolute; top: 0.5rem; right: 0.5rem; z-index: 2;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: rgba(10,11,15,0.55); color: var(--ink);
+  border: 1px solid var(--line); cursor: pointer; font-size: 0.9rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+.portrait__regen:hover { color: var(--ember); border-color: var(--ember-dim); }
+
+/* ── 초상 후보 그리드(모달) ──────────────────────── */
+.modal__box--wide { max-width: 680px; }
+/* 초상 후보 모달은 크게 보고 고르도록 더 넓게 + 큰 썸네일 */
+#portraitModal .modal__box--wide { max-width: min(1120px, 94vw); }
+.portrait-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.8rem;
+  max-height: 60vh; overflow-y: auto;
+}
+/* 후보 그리드: 개수에 맞춰 폭을 꽉 채워 크게(빈 칸 없이) */
+#portraitGrid {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1rem;
+  max-height: 76vh;
+}
+.portrait-grid img {
+  width: 100%; aspect-ratio: 1024 / 1536; object-fit: cover;
+  border-radius: 10px; border: 2px solid transparent; cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.portrait-grid img:hover { border-color: var(--ember-dim); transform: translateY(-2px); }
+.portrait-grid img.selected { border-color: var(--ember); }
+.portrait-modal__actions { margin-top: 1.1rem; display: flex; justify-content: flex-end; }
+
+/* ── 갤러리 버튼/빈 안내 ─────────────────────────── */
+.gallery-btn { width: 100%; margin-top: -0.3rem; }
+.gallery-empty { color: var(--muted); text-align: center; padding: 1.5rem 0; }

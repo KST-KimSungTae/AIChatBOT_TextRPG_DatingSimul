@@ -17,7 +17,25 @@ import urllib.request
 from settings_def import default_settings, settings_to_prompt, length_num_predict
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_GEN_URL = "http://localhost:11434/api/generate"
 MODEL = "huihui_ai/gemma-4-abliterated:12b-qat"
+
+
+def unload_llm():
+    """Ollama에서 모델을 메모리에서 내려 VRAM을 비운다(이미지 생성 직전 호출).
+    12GB에선 LLM과 이미지 모델을 동시에 못 올리므로, 이미지 뽑기 전에 LLM을 내린다.
+    best-effort — 실패해도 조용히 넘어간다."""
+    import json as _json
+    try:
+        body = _json.dumps({"model": MODEL, "prompt": "", "keep_alive": 0,
+                            "stream": False}).encode("utf-8")
+        req = urllib.request.Request(OLLAMA_GEN_URL, data=body,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            resp.read()
+        print("[VRAM] LLM 언로드 요청", flush=True)
+    except Exception as e:
+        print("[VRAM] LLM 언로드 실패(무시):", repr(e), flush=True)
 
 # 캐릭터에 기분 목록이 없을 때 쓸 기본값
 DEFAULT_MOODS = [
@@ -230,6 +248,35 @@ class ChatEngine:
         except Exception:
             pass
         return result
+
+    def appearance_to_tags(self):
+        """캐릭터의 한국어 외모 묘사를 danbooru 영어 태그로 변환한다(이미지 생성용).
+        LLM을 1번 호출. 결과는 호출부에서 캐릭터 파일에 캐시해 재사용한다."""
+        c = self.char
+        appearance = c.get("appearance", "") or ""
+        outfit = c.get("outfit", "") or ""
+        ctype = c.get("type", "") or "여성"
+        prompt = f"""다음 캐릭터의 외모·의상 설명을, 애니 이미지 생성(danbooru 태그)용 '영어 태그 목록'으로 변환해라.
+
+[유형] {ctype}
+[외모] {appearance}
+[의상] {outfit}
+
+규칙:
+- danbooru 스타일의 짧은 영어 태그를 콤마로 나열한다. (예: 1girl, solo, light brown hair, long hair, brown eyes, large breasts, slim waist, white dress)
+- 머리색/머리길이/눈색/체형/이목구비/의상 색과 종류를 태그로 옮긴다.
+- 문장이 아니라 태그만. 품질 태그(masterpiece 등)는 넣지 마라. 한국어·설명문 금지.
+- 인원수 태그(1girl 등)와 solo를 맨 앞에 포함한다.
+
+반드시 아래 JSON 형식으로만 답한다.
+{{"tags": "콤마로 구분된 영어 danbooru 태그"}}"""
+        try:
+            raw = self._call_ollama([{"role": "user", "content": prompt}])
+            data = json.loads(self._extract_json(raw))
+            tags = (data.get("tags") or "").strip().strip(",")
+            return tags
+        except Exception:
+            return ""
 
     # ── 설정값을 프롬프트 조각으로 (빈 값은 건너뜀) ──
     def _line(self, label, value):

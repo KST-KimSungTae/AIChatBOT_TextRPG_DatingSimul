@@ -209,6 +209,7 @@ async function openChat(charId) {
     $("memTitle").dataset.base = (c.name || "캐릭터") + "가 기억하는 것";
     document.title = c.name || "캐릭터 챗";
     currentSettings = data.settings || {};
+    renderPortrait(data.portrait);
     renderState(data);
     // 저장된 대화 기록 복원 (뒤로 갔다 와도, 서버를 껐다 켜도 유지)
     if (data.history && data.history.length) {
@@ -229,6 +230,126 @@ function showUnlockEffect() {
   div.textContent = "── 마음의 빗장이 풀렸다 ──";
   $("log").appendChild(div);
   $("log").scrollTop = $("log").scrollHeight;
+}
+
+// ── 초상(캐릭터 이미지) ────────────────────────
+function renderPortrait(url) {
+  const img = $("portraitImg"), empty = $("portraitEmpty"), loading = $("portraitLoading");
+  loading.hidden = true;
+  if (url) {
+    // 초상 확정 상태: 이미지 표시, 생성 버튼 숨김(변경 불가), 갤러리 버튼 노출
+    img.src = url;
+    img.hidden = false;
+    empty.hidden = true;
+    $("galleryBtn").hidden = false;
+  } else {
+    img.hidden = true;
+    img.removeAttribute("src");
+    empty.hidden = false;
+    $("galleryBtn").hidden = true;
+  }
+}
+
+async function openGallery() {
+  const grid = $("galleryGrid"), empty = $("galleryEmpty");
+  grid.innerHTML = "";
+  empty.hidden = true;
+  try {
+    const res = await fetch(`/api/characters/${currentCharId}/gallery`);
+    const data = await res.json();
+    if (!data.images || !data.images.length) {
+      empty.hidden = false;
+    } else {
+      for (const url of data.images) {
+        const im = document.createElement("img");
+        im.src = url;
+        im.loading = "lazy";
+        im.addEventListener("click", () => window.open(url, "_blank"));
+        grid.appendChild(im);
+      }
+    }
+  } catch (e) {
+    empty.hidden = false;
+  }
+  $("galleryModal").hidden = false;
+}
+function closeGallery() { $("galleryModal").hidden = true; }
+
+let portraitTimer = null;
+function portraitLoadingOn() {
+  $("portraitEmpty").hidden = true;
+  $("portraitLoading").hidden = false;
+  let sec = 0;
+  $("portraitTimer").textContent = "그리는 중… 0초";
+  portraitTimer = setInterval(() => {
+    sec++;
+    $("portraitTimer").textContent = `그리는 중… ${sec}초`;
+  }, 1000);
+}
+function portraitLoadingOff() {
+  $("portraitLoading").hidden = true;
+  if (portraitTimer) { clearInterval(portraitTimer); portraitTimer = null; }
+}
+
+async function genPortrait() {
+  portraitLoadingOn();
+  try {
+    const res = await fetch(`/api/characters/${currentCharId}/portrait/variations?n=4`,
+                            { method: "POST" });
+    portraitLoadingOff();
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.detail || "초상 생성에 실패했어. ComfyUI가 켜져 있는지 확인해줘.");
+      renderPortrait($("portraitImg").src && !$("portraitImg").hidden ? $("portraitImg").src : null);
+      return;
+    }
+    const data = await res.json();
+    openPortraitModal(data.candidates);
+  } catch (e) {
+    portraitLoadingOff();
+    alert("초상 생성 중 오류가 났어.");
+  }
+}
+
+let selectedCandidate = null;
+
+function openPortraitModal(candidates) {
+  const grid = $("portraitGrid");
+  grid.innerHTML = "";
+  selectedCandidate = null;
+  $("portraitConfirm").disabled = true;
+  for (const c of candidates) {
+    const im = document.createElement("img");
+    im.src = c.image;
+    im.title = `seed ${c.seed}`;
+    im.addEventListener("click", () => {
+      // 클릭 = 선택(하이라이트). 확정은 '확정하기' 버튼으로.
+      for (const el of grid.children) el.classList.remove("selected");
+      im.classList.add("selected");
+      selectedCandidate = c.index;
+      $("portraitConfirm").disabled = false;
+    });
+    grid.appendChild(im);
+  }
+  $("portraitModal").hidden = false;
+}
+
+function closePortraitModal() { $("portraitModal").hidden = true; }
+
+async function confirmPortrait() {
+  if (selectedCandidate === null) return;
+  const ok = confirm("이 초상으로 확정할까?\n\n확정하면 이 캐릭터의 기준 초상이 되고, 이후엔 바꿀 수 없어. "
+                     + "앞으로의 이미지는 이 초상을 토대로 생성돼.");
+  if (!ok) return;
+  try {
+    await fetch(`/api/characters/${currentCharId}/portrait/select`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ index: selectedCandidate }),
+    });
+  } catch (e) { /* 무시 */ }
+  closePortraitModal();
+  renderPortrait(`/api/characters/${currentCharId}/portrait?t=${Date.now()}`);
 }
 
 function renderSecret(unlock) {
@@ -500,6 +621,18 @@ $("composer").addEventListener("submit", (e) => {
 });
 $("advanceBtn").addEventListener("click", advance);
 $("suggestBtn").addEventListener("click", suggestLine);
+$("portraitGenBtn").addEventListener("click", genPortrait);
+$("portraitRegen").addEventListener("click", genPortrait);
+$("portraitConfirm").addEventListener("click", confirmPortrait);
+$("portraitModalClose").addEventListener("click", closePortraitModal);
+$("portraitModal").addEventListener("click", (e) => {
+  if (e.target === $("portraitModal")) closePortraitModal();
+});
+$("galleryBtn").addEventListener("click", openGallery);
+$("galleryModalClose").addEventListener("click", closeGallery);
+$("galleryModal").addEventListener("click", (e) => {
+  if (e.target === $("galleryModal")) closeGallery();
+});
 $("memToggle").addEventListener("click", () => {
   const olderEl = $("memoriesOlder");
   olderEl.hidden = !olderEl.hidden;

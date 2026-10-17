@@ -78,9 +78,18 @@
         </form>
       </main>
       <aside class="panel">
-        <div class="portrait" id="portrait" aria-hidden="true">
-          <span class="portrait__hint">초상은 아직<br>그려지지 않았다</span>
+        <div class="portrait" id="portrait">
+          <img class="portrait__img" id="portraitImg" alt="캐릭터 초상" hidden>
+          <div class="portrait__empty" id="portraitEmpty">
+            <span class="portrait__hint">초상은 아직<br>그려지지 않았다</span>
+            <button class="btn btn--ember btn--sm" id="portraitGenBtn" type="button">✨ 초상 생성</button>
+          </div>
+          <div class="portrait__loading" id="portraitLoading" hidden>
+            <div class="overlay__spinner"></div>
+            <span class="portrait__timer" id="portraitTimer">그리는 중… 0초</span>
+          </div>
         </div>
+        <button class="btn btn--ghost btn--sm gallery-btn" id="galleryBtn" type="button" hidden>🖼 갤러리</button>
         <div class="secret" id="secretBox" hidden>
           <span class="secret__label" id="secretLabel">이 아이가 바라는 것…</span>
           <span class="secret__text" id="secretText"></span>
@@ -128,6 +137,35 @@
       </div>
       <p class="modal__desc">이 캐릭터와의 대화 방식을 조절해. 바로 저장돼.</p>
       <div id="settingsFields" class="settings-fields"></div>
+    </div>
+  </div>
+
+  <!-- 초상 후보 선택 모달 -->
+  <div class="modal" id="portraitModal" hidden>
+    <div class="modal__box modal__box--wide">
+      <div class="modal__head">
+        <h2 class="modal__title">초상 고르기</h2>
+        <button class="modal__close" id="portraitModalClose">✕</button>
+      </div>
+      <p class="modal__desc">마음에 드는 초상을 하나 골라줘. 확정하면 이 캐릭터의 기준 초상이 되고, 이후엔 바꿀 수 없어.</p>
+      <div class="portrait-grid" id="portraitGrid"></div>
+      <div class="portrait-modal__actions">
+        <button class="btn btn--ghost" id="portraitRegen" type="button">↻ 다시 생성</button>
+        <button class="btn btn--ember" id="portraitConfirm" type="button" disabled>확정하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 갤러리 모달 -->
+  <div class="modal" id="galleryModal" hidden>
+    <div class="modal__box modal__box--wide">
+      <div class="modal__head">
+        <h2 class="modal__title">갤러리</h2>
+        <button class="modal__close" id="galleryModalClose">✕</button>
+      </div>
+      <p class="modal__desc">초상을 확정한 뒤로 생성된 사진들이야.</p>
+      <div class="portrait-grid" id="galleryGrid"></div>
+      <p class="gallery-empty" id="galleryEmpty" hidden>아직 저장된 사진이 없어.</p>
     </div>
   </div>
 
