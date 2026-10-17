@@ -256,8 +256,20 @@ class ChatEngine:
         voice = c.get("voice_examples") or []
         voice_text = "\n".join(f'- "{v}"' for v in voice) or "- (없음)"
         mood_list = ", ".join(self.moods)
-        address = c.get("address_term") or "너"
         settings_block = settings_to_prompt(getattr(self, "settings", None))
+
+        # 호칭/애칭: 호감도가 애칭 시작값을 넘으면 애칭을 쓰게 한다.
+        base_address = c.get("address_term") or "너"
+        nickname = (c.get("nickname") or "").strip()
+        try:
+            nick_th = int(c.get("nickname_threshold", 60))
+        except (ValueError, TypeError):
+            nick_th = 60
+        if nickname and self.state["affinity"] >= nick_th:
+            address_line = (f"- 유저를 평소엔 '{base_address}'라고 부르되, 지금은 충분히 가까워졌으니 "
+                            f"애칭 '{nickname}'(으)로 부른다. 애칭을 자연스럽게 섞어 쓴다.")
+        else:
+            address_line = f"- 유저를 '{base_address}'(이)라고 부른다."
 
         # 인물 설정 블록 (있는 항목만)
         info = ""
@@ -279,7 +291,7 @@ class ChatEngine:
 
 [상대(유저) 설정]
 {self._player_block()}
-- 유저를 '{address}'(이)라고 부른다.
+{address_line}
 
 [말투 예시] — 이 인물이 말하는 '톤'을 보여주는 참고용이다. 그대로 복사하지 말 것. 어조·거리감만 참고해서 지금 상황에 맞는 새 대사를 매번 직접 만들어라.
 {voice_text}
@@ -444,6 +456,46 @@ class ChatEngine:
         scaled = delta * factor
         result = int(scaled + 0.5) if scaled >= 0.5 else 0
         return result
+
+    def suggest_user_line(self):
+        """유저가 다음에 할 만한 대사를 하나 제안한다(자동 대사 버튼).
+        버튼을 눌렀을 때만 호출되므로 평소 대화 흐름의 호출 수에는 영향 없음."""
+        c = self.char
+        p = self.player
+        player_name = p.get("name") or "나"
+        player_bg = p.get("background") or "(설정 없음)"
+        # 최근 대화 몇 줄만 맥락으로
+        recent = ""
+        for turn in self.history[-6:]:
+            who = "상대" if turn.get("role") == "assistant" else player_name
+            recent += f"{who}: {turn.get('content','')}\n"
+        recent = recent.strip() or "(아직 대화 없음)"
+
+        prompt = f"""너는 지금 '유저(플레이어)'의 입장에서, 다음에 할 만한 자연스러운 '한 마디'를 제안한다.
+상대 캐릭터가 아니라, 플레이어가 상대에게 건넬 대사다.
+
+[플레이어] {player_name}
+- 설정: {player_bg}
+[상대 캐릭터] {c.get('name','')} — {c.get('relationship','')}
+[지금 장면] {c.get('scene','')}
+
+[최근 대화]
+{recent}
+
+규칙:
+- 플레이어가 상대에게 건넬 대사 '한 문장'만. 플레이어의 설정·현재 분위기에 맞게.
+- 상대(캐릭터)의 대사가 아니라, 플레이어 '내'가 할 말이다.
+- 반드시 한국어로만. 따옴표·설명 없이 대사 본문만.
+
+반드시 아래 JSON 형식으로만 답한다.
+{{"line": "플레이어가 할 대사 한 문장"}}"""
+        try:
+            raw = self._call_ollama([{"role": "user", "content": prompt}])
+            data = json.loads(self._extract_json(raw))
+            line = (data.get("line") or "").strip()
+            return line
+        except Exception:
+            return ""
 
     def chat(self, user_input, advance=False):
         # advance=True면 유저 입력 없이 이야기를 진전시킨다.

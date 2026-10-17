@@ -37,6 +37,10 @@ CHARACTER_SCHEMA = [
      "hint": "이 캐릭터라면 할 법한 대사 몇 개 (어투를 잡는 핵심)", "group": "성격·말투"},
     {"key": "address_term", "label": "유저를 부르는 호칭", "type": "text", "required": False,
      "hint": "예: 이름, 너, 당신, 주인님", "default": "너", "group": "성격·말투"},
+    {"key": "nickname", "label": "애칭", "type": "text", "required": False,
+     "hint": "가까워졌을 때 부를 애칭 (예: 자기, 오빠야). 비우면 안 씀", "group": "성격·말투"},
+    {"key": "nickname_threshold", "label": "애칭 시작 호감도", "type": "number", "required": False,
+     "hint": "이 호감도부터 애칭을 씀. 0이면 처음부터", "default": 60, "group": "성격·말투"},
 
     # 배경·세계관
     {"key": "background", "label": "배경/재력", "type": "textarea", "required": False,

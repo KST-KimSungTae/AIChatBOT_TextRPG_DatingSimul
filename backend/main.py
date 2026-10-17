@@ -115,6 +115,15 @@ def chat_advance(char_id: str):
     return result
 
 
+@app.post("/api/chat/{char_id}/suggest")
+def chat_suggest(char_id: str):
+    """유저가 할 만한 대사를 하나 제안한다(자동 대사 버튼). 상태는 바꾸지 않는다."""
+    engine = get_session(char_id)
+    if not engine:
+        raise HTTPException(404, "캐릭터를 찾을 수 없어.")
+    return {"line": engine.suggest_user_line()}
+
+
 @app.get("/api/chat/{char_id}/state")
 def chat_state(char_id: str):
     engine = get_session(char_id)

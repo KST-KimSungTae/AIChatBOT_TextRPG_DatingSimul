@@ -28,6 +28,8 @@ const DEFAULT_CHARACTER = {
     "어? 그, 그런 거 아니거든?! 오해하지 마."
   ],
   address_term: "오빠",
+  nickname: "오빠야",
+  nickname_threshold: 60,
   background: "대학생. 부유한 집안. 어릴 때부터 오빠(유저)를 짝사랑해, 서울로 올라간 오빠를 따라 근처 대학으로 진학하고 바로 옆집으로 이사 왔다. 오빠와의 미래를 위해 착실히 아르바이트로 적금 중. 오빠에게 여자친구가 있는지 늘 궁금해한다. 매일 아침 오빠를 깨우러 그의 집에 간다.",
   world: "현대 일상물",
   scene: "이른 아침, 유리가 옆집인 오빠(유저)의 집에 들어와 아직 자고 있는 오빠를 깨우러 온 참이다. 커튼을 걷으며 \"오빠, 아침이야! 언제까지 잘 거야~\" 하고 부르는 상황.",
@@ -382,6 +384,27 @@ async function advance() {
   }
 }
 
+async function suggestLine() {
+  // 할 말 추천: 결과를 대화칸에 채운다(자동 전송 아님 — 유저가 고쳐서 보낼 수 있게).
+  const btn = $("suggestBtn");
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "생각 중…";
+  try {
+    const res = await fetch(`/api/chat/${currentCharId}/suggest`, { method: "POST" });
+    const data = await res.json();
+    if (data.line) {
+      $("input").value = data.line;
+      $("input").focus();
+    }
+  } catch (e) {
+    /* 조용히 무시 — 추천 실패해도 직접 입력하면 됨 */
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
 // ── 대화 설정 모달 ────────────────────────────
 function openSettings() {
   const wrap = $("settingsFields");
@@ -450,6 +473,7 @@ $("composer").addEventListener("submit", (e) => {
   if (action || dialogue) send(action, dialogue);
 });
 $("advanceBtn").addEventListener("click", advance);
+$("suggestBtn").addEventListener("click", suggestLine);
 $("memToggle").addEventListener("click", () => {
   const olderEl = $("memoriesOlder");
   olderEl.hidden = !olderEl.hidden;
