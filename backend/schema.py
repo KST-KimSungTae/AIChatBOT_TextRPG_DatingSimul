@@ -58,11 +58,11 @@ CHARACTER_SCHEMA = [
      "hint": "0~100 (연인이면 높게, 낯선 사람이면 낮게)",
      "default": 30, "group": "관계"},
 
-    # 외모 (지금은 텍스트만, 나중에 이미지 생성에 사용)
-    {"key": "appearance", "label": "외모 묘사", "type": "textarea", "required": False,
-     "hint": "머리·눈·체형 등 (나중에 이미지 생성에 쓰임)", "group": "외모"},
-    {"key": "outfit", "label": "자주 입는 옷/컬러", "type": "textarea", "required": False,
-     "hint": "복장, 색 (나중에 이미지 생성에 쓰임)", "group": "외모"},
+    # 외모 (이미지 생성에 사용) — 신체와 의상을 분리
+    {"key": "appearance", "label": "외모 묘사(신체)", "type": "textarea", "required": False,
+     "hint": "머리·눈·이목구비·체형 등 신체 특징. 옷은 아래 칸에 (모든 이미지에 공통으로 쓰임)", "group": "외모"},
+    {"key": "outfit", "label": "선호 의상/컬러", "type": "textarea", "required": False,
+     "hint": "평소 취향. 첫 장면부터 강제되지 않고 맞는 장면에서 반영됨. 기준 초상엔 '색'만 반영되고 과감한 노출은 빠짐", "group": "외모"},
 
     # 기분 목록 (캐릭터별 커스텀, 기본 세트 제공)
     {"key": "moods", "label": "기분 목록", "type": "tags", "required": False,

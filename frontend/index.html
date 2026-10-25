@@ -83,6 +83,9 @@
           <div class="portrait__empty" id="portraitEmpty">
             <span class="portrait__hint">초상은 아직<br>그려지지 않았다</span>
             <button class="btn btn--ember btn--sm" id="portraitGenBtn" type="button">✨ 초상 생성</button>
+            <label class="adult-toggle" title="끄면 네거티브에 성인 태그를 넣어 건전하게 생성">
+              <input type="checkbox" id="adultTogglePortrait"> 성인 이미지
+            </label>
           </div>
           <div class="portrait__loading" id="portraitLoading" hidden>
             <div class="overlay__spinner"></div>
@@ -150,7 +153,13 @@
       <p class="modal__desc">마음에 드는 초상을 하나 골라줘. 확정하면 이 캐릭터의 기준 초상이 되고, 이후엔 바꿀 수 없어.</p>
       <div class="portrait-grid" id="portraitGrid"></div>
       <div class="portrait-modal__actions">
-        <button class="btn btn--ghost" id="portraitRegen" type="button">↻ 다시 생성</button>
+        <label class="adult-toggle adult-toggle--push" title="끄면 네거티브에 성인 태그를 넣어 건전하게 생성">
+          <input type="checkbox" id="adultToggleModal"> 성인 이미지
+        </label>
+        <button class="btn btn--ghost" id="portraitRetag" type="button"
+                title="외모·의상 태그를 LLM으로 다시 뽑아 생성 (느림)">✎ 태그 새로 생성</button>
+        <button class="btn btn--ghost" id="portraitRegen" type="button"
+                title="같은 태그로 시드만 바꿔 다시 생성 (빠름, LLM 미호출)">↻ 다시 생성</button>
         <button class="btn btn--ember" id="portraitConfirm" type="button" disabled>확정하기</button>
       </div>
     </div>

@@ -666,7 +666,7 @@ body {
 /* ── 초상 후보 그리드(모달) ──────────────────────── */
 .modal__box--wide { max-width: 680px; }
 /* 초상 후보 모달은 크게 보고 고르도록 더 넓게 + 큰 썸네일 */
-#portraitModal .modal__box--wide { max-width: min(1120px, 94vw); }
+#portraitModal .modal__box--wide { max-width: min(1500px, 96vw); }
 .portrait-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -675,9 +675,9 @@ body {
 }
 /* 후보 그리드: 개수에 맞춰 폭을 꽉 채워 크게(빈 칸 없이) */
 #portraitGrid {
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 1rem;
-  max-height: 76vh;
+  max-height: 82vh;
 }
 .portrait-grid img {
   width: 100%; aspect-ratio: 1024 / 1536; object-fit: cover;
@@ -686,7 +686,17 @@ body {
 }
 .portrait-grid img:hover { border-color: var(--ember-dim); transform: translateY(-2px); }
 .portrait-grid img.selected { border-color: var(--ember); }
-.portrait-modal__actions { margin-top: 1.1rem; display: flex; justify-content: flex-end; }
+.portrait-modal__actions { margin-top: 1.1rem; display: flex; align-items: center; justify-content: flex-end; gap: 0.6rem; }
+
+/* 성인 이미지 토글 (초상 영역·모달·설정창 공용) */
+.adult-toggle {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: 0.82rem; color: var(--muted); cursor: pointer; user-select: none;
+}
+.adult-toggle input { accent-color: var(--ember); cursor: pointer; }
+.adult-toggle--push { margin-right: auto; }   /* 모달에서 토글은 왼쪽, 버튼은 오른쪽 */
+.setting--toggle { margin-top: 0.4rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
+.setting__note { margin: 0.4rem 0 0; font-size: 0.76rem; color: var(--muted); line-height: 1.4; }
 
 /* ── 갤러리 버튼/빈 안내 ─────────────────────────── */
 .gallery-btn { width: 100%; margin-top: -0.3rem; }

@@ -78,12 +78,21 @@ def gallery_file(char_id, filename):
     return p if p.exists() else None
 
 
-def set_character_image(char_id, tags=None, seed=None):
-    """이미지 태그·기준 시드를 캐릭터 파일에 캐시(Phase B 일관성 재사용용)."""
+def set_character_image(char_id, body=None, base_outfit=None, seed=None, tags=None):
+    """이미지 태그·기준 시드를 캐릭터 파일에 캐시(Phase B 일관성 재사용용).
+    - body        : 신체 정체성 태그(모든 이미지 공통).
+    - base_outfit : 기준 초상용 중립 평상복 태그.
+    - seed        : 확정 초상의 시드(Phase B 일관성 재현용).
+    - tags        : (구버전 호환) 과거 단일 블롭 캐시.
+    """
     data = get_character(char_id)
     if not data:
         return
     img = data.get("image") or {}
+    if body is not None:
+        img["body"] = body
+    if base_outfit is not None:
+        img["base_outfit"] = base_outfit
     if tags is not None:
         img["tags"] = tags
     if seed is not None:

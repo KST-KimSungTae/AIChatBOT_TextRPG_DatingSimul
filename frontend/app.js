@@ -233,9 +233,13 @@ function showUnlockEffect() {
 }
 
 // ── 초상(캐릭터 이미지) ────────────────────────
+let portraitConfirmed = false;   // 기준 초상 확정 여부(장면 이미지 생성 가능 조건)
+let sceneBusy = false;           // 장면 이미지 생성 중 중복 방지
 function renderPortrait(url) {
   const img = $("portraitImg"), empty = $("portraitEmpty"), loading = $("portraitLoading");
   loading.hidden = true;
+  portraitConfirmed = !!url;
+  syncAdultToggle("adultTogglePortrait");   // 초상 영역 토글을 현재 설정값으로
   if (url) {
     // 초상 확정 상태: 이미지 표시, 생성 버튼 숨김(변경 불가), 갤러리 버튼 노출
     img.src = url;
@@ -291,12 +295,23 @@ function portraitLoadingOff() {
   if (portraitTimer) { clearInterval(portraitTimer); portraitTimer = null; }
 }
 
-async function genPortrait() {
+let portraitBusy = false;
+async function genPortrait(refreshTags = false) {
+  // refreshTags=false → 저장된 태그 재사용(시드만 다르게, LLM 미호출)
+  // refreshTags=true  → LLM으로 태그를 새로 뽑아 생성(느림)
+  if (portraitBusy) return;                       // 생성 중엔 중복 클릭 무시
+  portraitBusy = true;
+  const regenBtn = $("portraitRegen"), retagBtn = $("portraitRetag"),
+        confirmBtn = $("portraitConfirm"), genBtn = $("portraitGenBtn");
+  const activeBtn = refreshTags ? retagBtn : regenBtn;   // 눌린 버튼에 진행 표시
+  const activeLabel = activeBtn.textContent;
+  regenBtn.disabled = true; retagBtn.disabled = true; confirmBtn.disabled = true; genBtn.disabled = true;
+  activeBtn.textContent = "생성 중…";
   portraitLoadingOn();
   try {
-    const res = await fetch(`/api/characters/${currentCharId}/portrait/variations?n=4`,
+    const qs = "n=4" + (refreshTags ? "&refresh_tags=1" : "");
+    const res = await fetch(`/api/characters/${currentCharId}/portrait/variations?${qs}`,
                             { method: "POST" });
-    portraitLoadingOff();
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       alert(err.detail || "초상 생성에 실패했어. ComfyUI가 켜져 있는지 확인해줘.");
@@ -304,10 +319,15 @@ async function genPortrait() {
       return;
     }
     const data = await res.json();
-    openPortraitModal(data.candidates);
+    openPortraitModal(data.candidates);           // 새 후보로 교체(선택 해제 → 확정 버튼 다시 비활성)
   } catch (e) {
-    portraitLoadingOff();
     alert("초상 생성 중 오류가 났어.");
+  } finally {
+    portraitLoadingOff();
+    portraitBusy = false;
+    regenBtn.disabled = false; retagBtn.disabled = false; genBtn.disabled = false;
+    activeBtn.textContent = activeLabel;
+    confirmBtn.disabled = (selectedCandidate === null);   // 선택된 게 있을 때만 확정 가능
   }
 }
 
@@ -318,6 +338,7 @@ function openPortraitModal(candidates) {
   grid.innerHTML = "";
   selectedCandidate = null;
   $("portraitConfirm").disabled = true;
+  syncAdultToggle("adultToggleModal");   // 모달 토글을 현재 설정값으로
   for (const c of candidates) {
     const im = document.createElement("img");
     im.src = c.image;
@@ -470,6 +491,40 @@ function showTyping() {
   return div;
 }
 
+async function maybeGenerateScene(data) {
+  // 장면 전환(scene_changed)일 때, 확정 초상을 기준으로 장면 이미지를 생성해 초상 영역에 표시.
+  // (갤러리에도 저장됨. 기준 초상이 없으면 생성 안 함.)
+  if (!portraitConfirmed || sceneBusy) return;
+  if (!data || !data.scene_changed) return;
+  const prompt = (data.image_prompt || "").trim();
+  if (!prompt) return;
+
+  sceneBusy = true;
+  portraitLoadingOn();   // 초상 영역에 로딩 표시
+  try {
+    const res = await fetch(`/api/characters/${currentCharId}/scene-image`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_prompt: prompt }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      if (d.image) {
+        const img = $("portraitImg");
+        img.src = d.image + (d.image.includes("?") ? "&" : "?") + "t=" + Date.now();
+        img.hidden = false;
+        $("portraitEmpty").hidden = true;
+        $("galleryBtn").hidden = false;
+      }
+    }
+  } catch (e) {
+    /* 이미지 실패해도 대화는 계속 — 조용히 무시 */
+  } finally {
+    portraitLoadingOff();
+    sceneBusy = false;
+  }
+}
+
 async function send(action, dialogue) {
   // 행동/상황과 대화를 하나의 메시지로 합친다. 형식: (행동) "대화"
   let message = "";
@@ -495,6 +550,7 @@ async function send(action, dialogue) {
     addMessage(data.reply, "char");
     renderState(data);
     if (data.just_unlocked) showUnlockEffect();
+    await maybeGenerateScene(data);   // 장면 전환이면 장면 이미지 생성(초상 영역에 표시)
   } catch (e) {
     typing.remove();
     addMessage("(응답을 받지 못했어. 잠시 후 다시.)", "char");
@@ -519,6 +575,7 @@ async function advance() {
     typing.remove();
     addMessage(data.reply, "char");
     renderState(data);
+    await maybeGenerateScene(data);   // 장면 전환이면 장면 이미지 생성
   } catch (e) {
     typing.remove();
     addMessage("(응답을 받지 못했어. 잠시 후 다시.)", "char");
@@ -552,6 +609,24 @@ async function suggestLine() {
   }
 }
 
+// ── 성인 이미지 토글(초상 영역·모달·설정창 공유) ──
+async function setAdult(on) {
+  currentSettings = { ...currentSettings, adult_images: on };
+  for (const id of ["adultTogglePortrait", "adultToggleModal", "adultToggleSettings"]) {
+    const el = $(id); if (el) el.checked = on;   // 토글 3개 동기화
+  }
+  try {
+    await fetch(`/api/chat/${currentCharId}/settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ settings: currentSettings }),
+    });
+  } catch (e) { /* 저장 실패해도 다음 생성에 반영 시도 */ }
+}
+function syncAdultToggle(id) {
+  const el = $(id); if (el) el.checked = !!currentSettings.adult_images;
+}
+
 // ── 대화 설정 모달 ────────────────────────────
 function openSettings() {
   const wrap = $("settingsFields");
@@ -578,6 +653,19 @@ function openSettings() {
     slider.addEventListener("input", showVal);
     slider.addEventListener("change", saveSettings);
   }
+  // 성인 이미지 생성 토글
+  const adultField = document.createElement("div");
+  adultField.className = "setting setting--toggle";
+  adultField.innerHTML = `
+    <label class="adult-toggle">
+      <input type="checkbox" id="adultToggleSettings"> 성인 이미지 생성
+    </label>
+    <p class="setting__note">끄면 이미지 네거티브에 성인 태그를 넣어 건전하게 생성해. 켜면 허용.</p>`;
+  wrap.appendChild(adultField);
+  const adultEl = adultField.querySelector("#adultToggleSettings");
+  adultEl.checked = !!currentSettings.adult_images;
+  adultEl.addEventListener("change", (e) => setAdult(e.target.checked));
+
   $("settingsModal").hidden = false;
 }
 
@@ -589,6 +677,9 @@ async function saveSettings() {
     const slider = $(`ss_${def.key}`);
     if (slider) settings[def.key] = Number(slider.value);
   }
+  // 성인 이미지 토글 값 보존(슬라이더만 바꿔도 안 날아가게)
+  const adultEl = $("adultToggleSettings");
+  settings.adult_images = adultEl ? adultEl.checked : !!currentSettings.adult_images;
   currentSettings = settings;
   try {
     await fetch(`/api/chat/${currentCharId}/settings`, {
@@ -621,13 +712,14 @@ $("composer").addEventListener("submit", (e) => {
 });
 $("advanceBtn").addEventListener("click", advance);
 $("suggestBtn").addEventListener("click", suggestLine);
-$("portraitGenBtn").addEventListener("click", genPortrait);
-$("portraitRegen").addEventListener("click", genPortrait);
+$("portraitGenBtn").addEventListener("click", () => genPortrait(false));  // 첫 생성(태그 없으면 자동 변환)
+$("portraitRegen").addEventListener("click", () => genPortrait(false));   // 시드만 다르게(LLM 미호출)
+$("portraitRetag").addEventListener("click", () => genPortrait(true));    // 태그 새로 뽑기(LLM 호출)
 $("portraitConfirm").addEventListener("click", confirmPortrait);
+$("adultTogglePortrait").addEventListener("change", (e) => setAdult(e.target.checked));
+$("adultToggleModal").addEventListener("change", (e) => setAdult(e.target.checked));
 $("portraitModalClose").addEventListener("click", closePortraitModal);
-$("portraitModal").addEventListener("click", (e) => {
-  if (e.target === $("portraitModal")) closePortraitModal();
-});
+// 초상 모달은 바깥을 눌러도 닫히지 않게(실수로 닫혀 후보가 날아가는 것 방지). ✕로만 닫음.
 $("galleryBtn").addEventListener("click", openGallery);
 $("galleryModalClose").addEventListener("click", closeGallery);
 $("galleryModal").addEventListener("click", (e) => {

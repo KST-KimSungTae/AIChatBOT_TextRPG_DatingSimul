@@ -51,7 +51,8 @@ def get_session(char_id):
         # 저장된 대화 진행 상태가 있으면 불러와 복원(없으면 새 대화로 시작)
         saved = store.load_session(char_id)
         sessions[char_id] = ChatEngine(
-            data["character"], data.get("player"), saved_session=saved
+            data["character"], data.get("player"), saved_session=saved,
+            image=data.get("image"),
         )
     return sessions[char_id]
 
@@ -152,9 +153,13 @@ def chat_state(char_id: str):
 
 # ── 초상(기준 이미지) 생성·선택·조회 ─────────────────
 @app.post("/api/characters/{char_id}/portrait/variations")
-def portrait_variations(char_id: str, n: int = 4):
-    """외모 묘사 → danbooru 태그 변환 후, 시드 다른 후보 n장을 생성해 base64로 돌려준다.
-    (첫 초상을 고르는 용도. 확정 후엔 초상이 잠기므로 호출 불가.)"""
+def portrait_variations(char_id: str, n: int = 4, refresh_tags: int = 0):
+    """시드 다른 후보 n장을 생성해 base64로 돌려준다. (첫 초상을 고르는 용도. 확정 후엔 호출 불가.)
+
+    refresh_tags=0 : 저장된 태그 재사용(시드만 다르게) → LLM 호출 없음(빠름).
+    refresh_tags=1 : 외모·의상을 LLM으로 다시 변환해 태그를 새로 뽑는다(느림).
+                     (태그가 아직 없으면 refresh 값과 무관하게 한 번 변환한다.)
+    """
     if not image_gen.ping():
         raise HTTPException(503, "ComfyUI에 연결할 수 없어. ComfyUI가 켜져 있는지 확인해줘.")
     data = store.get_character(char_id)
@@ -163,25 +168,35 @@ def portrait_variations(char_id: str, n: int = 4):
     if store.has_portrait(char_id):
         raise HTTPException(400, "이미 기준 초상이 확정됐어. 초상은 바꿀 수 없어.")
 
-    # 태그: 캐시가 있으면 재사용, 없으면 LLM으로 변환 후 캐시
-    tags = (data.get("image") or {}).get("tags")
-    if not tags:
-        engine = get_session(char_id)
-        tags = engine.appearance_to_tags()
-        store.set_character_image(char_id, tags=tags)
+    engine = get_session(char_id)
+    adult = bool(engine.settings.get("adult_images", False))   # 성인 이미지 허용 여부(기본 False)
+
+    img = data.get("image") or {}
+    body = img.get("body")
+    base_outfit = img.get("base_outfit")
+    # 태그가 없거나 '새로 뽑기'를 요청했을 때만 LLM 호출. 그 외엔 캐시 재사용(LLM 0회).
+    if refresh_tags or not body:
+        res = engine.appearance_to_tags()
+        body, base_outfit = res["body"], res["base_outfit"]
+        store.set_character_image(char_id, body=body, base_outfit=base_outfit)
+
+    # 기준 초상 = 신체 + 중립 평상복. (선호 노출 의상은 초상에 넣지 않는다 → 장면 이미지에서만 등장)
+    positive = ", ".join(t for t in [body, base_outfit] if t)
+    negative = image_gen.build_negative(adult=adult)   # adult Off면 성인 가드 태그 추가
 
     # 이미지 뽑기 전에 LLM을 내려 VRAM 확보(12GB)
     engine_mod.unload_llm()
 
     n = max(1, min(6, int(n)))
-    variants = image_gen.generate_variations(tags, n=n)
+    variants = image_gen.generate_variations(positive, negative=negative, n=n)
     if not variants:
         raise HTTPException(500, "이미지 생성에 실패했어. ComfyUI 콘솔의 에러를 확인해줘.")
 
     # 첫 초상 후보들은 갤러리에 저장하지 않는다(고르는 선택지일 뿐).
     portrait_candidates[char_id] = variants
     return {
-        "tags": tags,
+        "body": body,
+        "base_outfit": base_outfit,
         "candidates": [
             {"index": i, "seed": seed,
              "image": "data:image/png;base64," + base64.b64encode(png).decode()}
@@ -232,6 +247,44 @@ def gallery_image(char_id: str, filename: str):
     return FileResponse(str(p), media_type="image/png")
 
 
+# ── 장면 이미지 (Phase B: 대화 장면에 맞춘 이미지) ──────
+class SceneImageRequest(BaseModel):
+    image_prompt: str = ""
+
+
+@app.post("/api/characters/{char_id}/scene-image")
+def scene_image(char_id: str, req: SceneImageRequest):
+    """확정 초상을 기준으로, 현재 장면 태그(image_prompt)를 얹어 장면 이미지를 생성한다.
+    일관성: 같은 body(고정 외형) 태그 + 확정 초상의 '고정 시드' 재사용. 결과는 갤러리에 저장."""
+    if not image_gen.ping():
+        raise HTTPException(503, "ComfyUI에 연결할 수 없어. ComfyUI가 켜져 있는지 확인해줘.")
+    data = store.get_character(char_id)
+    if not data:
+        raise HTTPException(404, "캐릭터를 찾을 수 없어.")
+    if not store.has_portrait(char_id):
+        raise HTTPException(400, "먼저 기준 초상을 확정해줘.")
+
+    img = data.get("image") or {}
+    body = img.get("body") or img.get("tags") or ""   # 신체 태그(구버전 캐시는 tags로 폴백)
+    seed = img.get("seed")                       # 확정 초상의 시드 = 캐릭터 고정 시드
+    scene = (req.image_prompt or "").strip()
+    positive = ", ".join(t for t in [body, scene] if t)
+    if not positive:
+        raise HTTPException(400, "생성할 장면 정보가 없어.")
+
+    engine = get_session(char_id)
+    adult = bool(engine.settings.get("adult_images", False))
+    negative = image_gen.build_negative(adult=adult)
+
+    engine_mod.unload_llm()                       # VRAM 확보
+    png = image_gen.generate_one(positive, negative=negative, seed=seed, free_after=True)
+    if not png:
+        raise HTTPException(500, "장면 이미지 생성에 실패했어. ComfyUI 콘솔을 확인해줘.")
+
+    fname = store.save_to_gallery(char_id, png, seed or 0)
+    return {"image": f"/api/characters/{char_id}/gallery/{fname}", "prompt": positive}
+
+
 @app.get("/api/settings-def")
 def settings_def():
     """슬라이더 정의(프론트가 설정 패널을 자동 생성)."""
@@ -258,7 +311,8 @@ def chat_reset(char_id: str):
     if not data:
         raise HTTPException(404, "캐릭터를 찾을 수 없어.")
     store.clear_session(char_id)            # 저장된 진행 상태도 삭제
-    sessions[char_id] = ChatEngine(data["character"], data.get("player"))
+    sessions[char_id] = ChatEngine(data["character"], data.get("player"),
+                                   image=data.get("image"))
     return {"ok": True}
 
 

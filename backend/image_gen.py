@@ -28,7 +28,22 @@ SCHEDULER = "simple"
 QUALITY_PREFIX = "masterpiece, best quality, newest, absurdres, highres, "
 DEFAULT_NEGATIVE = ("worst quality, low quality, bad anatomy, bad hands, missing fingers, "
                     "extra digits, fewer digits, watermark, signature, text, "
-                    "jpeg artifacts, blurry, lowres")
+                    "jpeg artifacts, blurry, lowres, "
+                    "muscular, muscular female, bodybuilder, six pack abs, defined abs, veiny")
+
+# 성인(성기·노출) 억제용 네거티브. adult=Off(기본)일 때만 네거티브에 추가해 건전하게 유지한다.
+SFW_GUARD_NEGATIVE = ("nsfw, nude, naked, topless, bottomless, nipples, areola, "
+                      "pussy, vaginal, penis, sex, cum, explicit, uncensored, "
+                      "spread legs, anus, pubic hair, bar censor, mosaic censoring")
+
+
+def build_negative(adult=False):
+    """네거티브 프롬프트 생성. adult=False(기본)면 성인 가드 태그를 덧붙여 건전하게 유지.
+    adult=True면 가드를 빼서 성인 이미지 생성을 허용한다."""
+    neg = DEFAULT_NEGATIVE
+    if not adult:
+        neg = neg + ", " + SFW_GUARD_NEGATIVE
+    return neg
 # ────────────────────────────────────────────────────────
 
 

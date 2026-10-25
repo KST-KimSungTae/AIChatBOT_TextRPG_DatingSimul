@@ -46,9 +46,10 @@ DEFAULT_MOODS = [
 
 
 class ChatEngine:
-    def __init__(self, character, player=None, saved_session=None):
+    def __init__(self, character, player=None, saved_session=None, image=None):
         self.char = character
         self.player = player or {}
+        self.image = image or {}   # 캐릭터 파일 최상위의 image dict(body/base_outfit/seed)
         self.moods = character.get("moods") or DEFAULT_MOODS
 
         # 저장된 대화 진행 상태가 있으면 그걸로 복원한다(서버 재시작·뒤로가기 후에도 유지).
@@ -120,9 +121,10 @@ class ChatEngine:
         }
 
     def update_settings(self, settings):
-        """유저가 슬라이더로 바꾼 대화 설정을 반영한다."""
+        """유저가 바꾼 대화 설정을 반영한다. 기존 값 위에 병합(부분 업데이트해도
+        다른 키, 예: adult_images 가 유지된다)."""
         if isinstance(settings, dict):
-            self.settings = {**default_settings(), **settings}
+            self.settings = {**default_settings(), **(self.settings or {}), **settings}
         return self.settings
 
     def public_unlock(self):
@@ -250,33 +252,50 @@ class ChatEngine:
         return result
 
     def appearance_to_tags(self):
-        """캐릭터의 한국어 외모 묘사를 danbooru 영어 태그로 변환한다(이미지 생성용).
+        """캐릭터의 한국어 묘사를 danbooru 영어 태그로 변환한다(이미지 생성용).
+        신체(불변)와 기준 복장(중립·평상)을 '분리'해서 돌려준다.
+
+        - body        : 머리·눈·이목구비·체형 등 '옷을 뺀' 신체 정체성. 모든 이미지 공통(일관성 앵커).
+        - base_outfit : 기준 초상용 '중립 평상복'. 선호 의상의 '색'만 악센트로 반영하고,
+                        노출 높은 선호 의상(속옷·비키니·란제리 등)은 초상에서 제외한다.
+                        (그런 복장은 Phase B에서 장면 맥락이 만들어졌을 때만 등장.)
+
         LLM을 1번 호출. 결과는 호출부에서 캐릭터 파일에 캐시해 재사용한다."""
         c = self.char
         appearance = c.get("appearance", "") or ""
         outfit = c.get("outfit", "") or ""
         ctype = c.get("type", "") or "여성"
-        prompt = f"""다음 캐릭터의 외모·의상 설명을, 애니 이미지 생성(danbooru 태그)용 '영어 태그 목록'으로 변환해라.
+        world = c.get("world", "") or ""
+        background = c.get("background", "") or ""
+        prompt = f"""다음 캐릭터를 애니 이미지 생성(danbooru 태그)용 '영어 태그'로 변환해라.
+'신체 정체성(body)'과 '기준 초상용 복장(base_outfit)'을 분리한다.
 
 [유형] {ctype}
-[외모] {appearance}
-[의상] {outfit}
+[세계관] {world}
+[배경] {background}
+[외모(신체)] {appearance}
+[선호 의상·컬러(참고용)] {outfit}
 
 규칙:
-- danbooru 스타일의 짧은 영어 태그를 콤마로 나열한다. (예: 1girl, solo, light brown hair, long hair, brown eyes, large breasts, slim waist, white dress)
-- 머리색/머리길이/눈색/체형/이목구비/의상 색과 종류를 태그로 옮긴다.
-- 문장이 아니라 태그만. 품질 태그(masterpiece 등)는 넣지 마라. 한국어·설명문 금지.
-- 인원수 태그(1girl 등)와 solo를 맨 앞에 포함한다.
+- danbooru 스타일 짧은 영어 태그를 콤마로 나열. 문장·한국어·설명 금지. 품질 태그(masterpiece 등) 금지.
+- body: 머리색/머리길이/눈색/이목구비/체형 등 '옷을 제외한' 신체 특징만. 맨 앞에 1girl, solo 포함. 복장 태그는 넣지 마라.
+  * 체형·복근은 과장 없이 자연스럽게 옮긴다. '탄탄한/날씬한' 정도면 slim, fit, toned body 정도로만.
+  * muscular, muscular female, bodybuilder, six pack abs, defined abs, visible abs 처럼 과도한 근육·복근 태그는 쓰지 마라(만화체 몸매가 과하게 벌크업되는 걸 막기 위함).
+- base_outfit: 이 캐릭터가 '특별한 상황이 아닐 때 평소 입을 법한' 단정한 평상복 1벌을 태그로. 세계관·배경에 맞게.
+  * [선호 의상·컬러]에서는 '색'만 참고해 평상복에 반영한다(예: 흰색/빨간색 → white, red 계열 평상복).
+  * 노출 높은 옷·속옷·비키니·란제리·수영복 등은 절대 넣지 마라. 단정하고 일상적인 복장만.
+  * (그런 선호 복장은 기준 초상이 아니라, 나중에 특정 장면에서 쓰인다.)
 
 반드시 아래 JSON 형식으로만 답한다.
-{{"tags": "콤마로 구분된 영어 danbooru 태그"}}"""
+{{"body": "콤마로 구분된 신체 태그", "base_outfit": "콤마로 구분된 평상복 태그"}}"""
         try:
             raw = self._call_ollama([{"role": "user", "content": prompt}])
             data = json.loads(self._extract_json(raw))
-            tags = (data.get("tags") or "").strip().strip(",")
-            return tags
+            body = (data.get("body") or "").strip().strip(",")
+            base_outfit = (data.get("base_outfit") or "").strip().strip(",")
+            return {"body": body, "base_outfit": base_outfit}
         except Exception:
-            return ""
+            return {"body": "", "base_outfit": ""}
 
     # ── 설정값을 프롬프트 조각으로 (빈 값은 건너뜀) ──
     def _line(self, label, value):
@@ -390,6 +409,13 @@ class ChatEngine:
 - mood는 반드시 다음 목록에서 '정확히 하나'만 고른다. 목록 밖의 단어, 이모지, 기호, 나열은 금지.
 - 가능한 mood: {mood_list}
 
+[이미지(image_prompt) 규칙]
+- image_prompt는 '영어 danbooru 태그'로만 쓴다(한국어·문장 금지). 6~14개.
+- 지금 이 순간의 '의상 + 표정·포즈·행동·배경·구도'를 담는다. 의상 태그는 반드시 포함한다(빠지면 엉뚱한 옷이 생성됨).
+- 의상은 현재 상황·장소·분위기에 맞는 옷으로 고른다(실내복·외출복·드레스·수영복 등). 캐릭터의 평소 취향(선호 의상·컬러)을 반영하되, 장면이 요구하지 않으면 과한 노출은 피한다.
+- 머리색·눈색·체형 등 고정 외형은 넣지 마라(기준 초상으로 자동 유지된다).
+- scene_changed: 장소가 바뀌거나 포즈·의상·분위기가 뚜렷이 달라진 '새 장면'이면 true, 같은 장면에서 미세한 변화면 false.
+
 [출력 형식]
 반드시 아래 JSON 객체 '하나만' 출력한다. JSON 밖의 다른 텍스트는 절대 쓰지 않는다.
 {{
@@ -398,7 +424,9 @@ class ChatEngine:
   "affinity_change": 이번 대화로 인한 호감도 변화 정수 (-5 에서 +5 사이),
   "trust_change": 이번 대화로 인한 신뢰도 변화 정수 (-5 에서 +3 사이, 대부분 0),
   "special": 관계를 크게 진전시킬 특별한 순간이면 true, 아니면 false,
-  "new_memory": "이번 대화에서 기억할 사실 한 가지. 없으면 빈 문자열"
+  "new_memory": "이번 대화에서 기억할 사실 한 가지. 없으면 빈 문자열",
+  "image_prompt": "지금 장면의 영어 태그(의상 + 표정·포즈·배경·구도). 예: white sweater, skirt, smile, sitting, cafe, upper body",
+  "scene_changed": 장소·포즈·의상·분위기가 이전과 뚜렷이 달라졌으면 true, 같은 장면이 이어지면 false
 }}"""
 
     def _call_ollama(self, messages, num_predict=None):
@@ -443,7 +471,8 @@ class ChatEngine:
         """모델 응답을 파싱한다. JSON이 깨져도 최대한 내용을 건져낸다."""
         default = {"reply": "", "mood": self.state["mood"],
                    "affinity_change": 0, "trust_change": 0,
-                   "special": False, "new_memory": ""}
+                   "special": False, "new_memory": "",
+                   "image_prompt": "", "scene_changed": False}
         # 1차: 정상 JSON 파싱
         try:
             data = json.loads(self._extract_json(raw))
@@ -455,7 +484,7 @@ class ChatEngine:
         # 2차: JSON이 깨졌으면 필드를 정규식으로 하나씩 건져낸다
         print("[파싱 실패] 원문 일부:", repr(raw[:400]), flush=True)
         result = dict(default)
-        m = re.search(r'"reply"\s*:\s*"(.*?)"\s*,\s*"(?:mood|affinity_change|trust_change|special|new_memory)"',
+        m = re.search(r'"reply"\s*:\s*"(.*?)"\s*,\s*"(?:mood|affinity_change|trust_change|special|new_memory|image_prompt|scene_changed)"',
                       raw, re.DOTALL)
         if m:
             result["reply"] = m.group(1).replace('\\"', '"').replace("\\n", "\n").strip()
@@ -474,6 +503,12 @@ class ChatEngine:
         m = re.search(r'"new_memory"\s*:\s*"([^"]*)"', raw)
         if m:
             result["new_memory"] = m.group(1)
+        m = re.search(r'"image_prompt"\s*:\s*"([^"]*)"', raw)
+        if m:
+            result["image_prompt"] = m.group(1)
+        m = re.search(r'"scene_changed"\s*:\s*(true|false)', raw)
+        if m:
+            result["scene_changed"] = (m.group(1) == "true")
 
         # 그래도 reply가 비면, 최후 수단으로 JSON 껍데기를 벗긴 원문을 대사로
         if not result["reply"].strip():
@@ -621,6 +656,8 @@ class ChatEngine:
             "mood": self.state["mood"],
             "memories": self.state["memories"],
             "unlock": self.public_unlock(),
+            "image_prompt": (out.get("image_prompt") or "").strip(),
+            "scene_changed": bool(out.get("scene_changed", False)),
         }
         if just_unlocked:
             result["just_unlocked"] = True
