@@ -137,6 +137,10 @@ def chat_state(char_id: str):
     engine = get_session(char_id)
     if not engine:
         raise HTTPException(404, "캐릭터를 찾을 수 없어.")
+    # 갤러리(최신 먼저) = [장면들..., 기준 초상]. 장면이 있으면 최신 장면을 재입장 시 복원 표시.
+    gallery = store.list_gallery(char_id)
+    scene_url = (f"/api/characters/{char_id}/gallery/{gallery[0]}"
+                 if len(gallery) > 1 else None)
     return {
         "affinity": engine.state["affinity"],
         "trust": engine.state.get("trust", 0),
@@ -147,6 +151,7 @@ def chat_state(char_id: str):
         "unlock": engine.public_unlock(),   # 힌트(가림)·해방 여부
         "portrait": (f"/api/characters/{char_id}/portrait?t={store.portrait_mtime(char_id)}"
                      if store.has_portrait(char_id) else None),
+        "scene": scene_url,                 # 마지막 장면 이미지(없으면 None → 기준 초상 표시)
         "character": engine.char,
     }
 

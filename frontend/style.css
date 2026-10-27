@@ -698,6 +698,19 @@ body {
 .setting--toggle { margin-top: 0.4rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
 .setting__note { margin: 0.4rem 0 0; font-size: 0.76rem; color: var(--muted); line-height: 1.4; }
 
+/* ── 라이트박스(이미지 확대) ──────────────────────── */
+.lightbox {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 9, 12, 0.88); backdrop-filter: blur(3px);
+  cursor: zoom-out; padding: 2vh;
+}
+.lightbox[hidden] { display: none !important; }
+.lightbox__img {
+  max-width: 94vw; max-height: 94vh; object-fit: contain;
+  border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+
 /* ── 갤러리 버튼/빈 안내 ─────────────────────────── */
 .gallery-btn { width: 100%; margin-top: -0.3rem; }
 .gallery-empty { color: var(--muted); text-align: center; padding: 1.5rem 0; }

@@ -209,7 +209,8 @@ async function openChat(charId) {
     $("memTitle").dataset.base = (c.name || "캐릭터") + "가 기억하는 것";
     document.title = c.name || "캐릭터 챗";
     currentSettings = data.settings || {};
-    renderPortrait(data.portrait);
+    // 재입장 시 마지막 장면 이미지가 있으면 그걸로, 없으면 기준 초상.
+    renderPortrait(data.scene || data.portrait);
     renderState(data);
     // 저장된 대화 기록 복원 (뒤로 갔다 와도, 서버를 껐다 켜도 유지)
     if (data.history && data.history.length) {
@@ -268,7 +269,7 @@ async function openGallery() {
         const im = document.createElement("img");
         im.src = url;
         im.loading = "lazy";
-        im.addEventListener("click", () => window.open(url, "_blank"));
+        im.addEventListener("click", () => openLightbox(url));   // 새 탭 대신 인페이지 확대
         grid.appendChild(im);
       }
     }
@@ -278,6 +279,16 @@ async function openGallery() {
   $("galleryModal").hidden = false;
 }
 function closeGallery() { $("galleryModal").hidden = true; }
+
+// ── 라이트박스(이미지 인페이지 확대) ──────────────
+function openLightbox(url) {
+  $("lightboxImg").src = url;
+  $("lightbox").hidden = false;
+}
+function closeLightbox() {
+  $("lightbox").hidden = true;
+  $("lightboxImg").removeAttribute("src");
+}
 
 let portraitTimer = null;
 function portraitLoadingOn() {
@@ -724,6 +735,10 @@ $("galleryBtn").addEventListener("click", openGallery);
 $("galleryModalClose").addEventListener("click", closeGallery);
 $("galleryModal").addEventListener("click", (e) => {
   if (e.target === $("galleryModal")) closeGallery();
+});
+$("lightbox").addEventListener("click", closeLightbox);   // 확대 이미지 아무 데나 클릭 → 닫기
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("lightbox").hidden) closeLightbox();
 });
 $("memToggle").addEventListener("click", () => {
   const olderEl = $("memoriesOlder");
