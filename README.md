@@ -86,14 +86,9 @@ uvicorn main:app --reload --port 8010
 ```
 → 브라우저에서 `http://localhost:8010` 접속.
 
-### C. 단일 실행파일(.exe)로 빌드
-`PACKAGING.md` 참조. 요약:
-```bash
-pip install pyinstaller
-pyinstaller --onefile --name CharacterChat --add-data "frontend;frontend" ^
-  --collect-submodules uvicorn --collect-all webview backend/launcher.py
-```
-→ `dist/CharacterChat.exe` (실행 시 exe 옆 `data/`에 데이터 저장. 쓰기 가능한 폴더에서 실행할 것)
+### C. 단일 실행파일(.exe)
+그냥 쓰기만 할 거면 빌드할 필요 없이 위 **[다운로드](#다운로드-빌드-없이-바로-실행)** 섹션의
+Releases 파일을 받으면 됩니다. 직접 빌드하려면 `PACKAGING.md`를 참조하세요.
 
 ---
 
