@@ -430,20 +430,25 @@ class ChatEngine:
 }}"""
 
     def _call_ollama(self, messages, num_predict=None):
-        options = {"temperature": 0.8}
+        # num_ctx: 컨텍스트 창을 16K로 제한. 모델 기본값(256K)은 KV 캐시가 VRAM을 잡아먹어
+        # 12GB에서 모델이 CPU로 새고(=느림) → 실사용(시스템+history+생성 ~8K)엔 16K면 충분하고
+        # 이걸로 모델이 GPU에 온전히 올라가 훨씬 빨라진다.
+        options = {"temperature": 0.8, "num_ctx": 16384}
         if num_predict:
             options["num_predict"] = num_predict   # 길이 설정에 따른 넉넉한 상한(자르는 게 아님)
         body = {
             "model": MODEL,
             "messages": messages,
             "stream": False,
+            # format:"json": JSON 문법을 강제해 모델이 문자열·괄호를 끝까지 닫게 한다.
+            # (빼면 응답이 중간에 뚝 잘리는 문제가 생겨 복원. 빈 응답은 아래 재시도로 완화.)
             "format": "json",
             "options": options,
             "keep_alive": "30m",   # 모델을 30분간 메모리에 유지 → cold start·빈 응답 감소
         }
-        # 드물게 빈 응답이 올 때를 대비한 가벼운 안전망(1회만 재시도). 보통은 안 걸린다.
+        # 드물게 빈 응답이 올 때를 대비한 안전망(최대 2회 재시도).
         content = ""
-        for attempt in range(2):
+        for attempt in range(3):
             req = urllib.request.Request(
                 OLLAMA_URL,
                 data=json.dumps(body).encode("utf-8"),
@@ -454,8 +459,8 @@ class ChatEngine:
             content = (data.get("message", {}).get("content") or "").strip()
             if content:
                 return content
-            if attempt == 0:
-                print("[빈 응답 재시도 1회]", flush=True)
+            if attempt < 2:
+                print(f"[빈 응답 재시도 {attempt + 1}회]", flush=True)
         return content
 
     @staticmethod
@@ -585,8 +590,9 @@ class ChatEngine:
         # 추상적 지시문 하나만 주면 Gemma가 빈 응답을 잘 뱉으므로,
         # '유저가 가만히 있다'는 짧은 상황을 반응 대상으로 주고 진전 지시는 간결하게 덧붙인다.
         if advance:
-            turn_text = ("(가만히 너를 바라보며 다음을 기다린다) "
-                         "네가 먼저 말이나 행동으로 이야기를 딱 한 걸음만 자연스럽게 이끌어줘.")
+            # 추상적 '이끌어줘' 지시는 Gemma가 빈 응답을 잘 뱉으므로, 반응할 '구체적 장면 비트'를 준다.
+            # 인물이 먼저 행동/대사로 장면을 한 걸음 진행하는 건 페르소나·능동성 설정이 담당.
+            turn_text = "(유저는 특별히 말하거나 행동하지 않고 가만히 있는다. 시간이 조금 흐른다.)"
         else:
             turn_text = user_input
 
