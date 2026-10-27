@@ -322,5 +322,5 @@ def chat_reset(char_id: str):
 
 
 # 프론트엔드 정적 파일 서빙 (API 라우트들 뒤에 둔다)
-frontend_dir = Path(__file__).parent.parent / "frontend"
-app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+from paths import FRONTEND_DIR   # 개발/패키징(.exe) 환경에 맞는 프론트엔드 경로
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

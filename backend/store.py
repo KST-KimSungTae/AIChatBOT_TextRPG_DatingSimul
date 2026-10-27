@@ -6,21 +6,22 @@ data/characters/ 폴더에 저장하고, 목록·생성·조회·삭제를 제�
 
 import json
 import uuid
-from pathlib import Path
 
-DATA_DIR = Path(__file__).parent.parent / "data" / "characters"
+from paths import DATA_ROOT   # 개발/패키징(.exe) 환경에 맞는 쓰기 가능 데이터 경로
+
+DATA_DIR = DATA_ROOT / "characters"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # 대화 진행 상태(호감도·기분·기억·대화기록)를 저장하는 폴더. 캐릭터 설정과 분리.
-SESSION_DIR = Path(__file__).parent.parent / "data" / "sessions"
+SESSION_DIR = DATA_ROOT / "sessions"
 SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
 # 캐릭터 기준 초상 이미지 폴더.
-PORTRAIT_DIR = Path(__file__).parent.parent / "data" / "portraits"
+PORTRAIT_DIR = DATA_ROOT / "portraits"
 PORTRAIT_DIR.mkdir(parents=True, exist_ok=True)
 
 # 갤러리(초상 확정 이후 생성된 사진들) 폴더.
-GALLERY_DIR = Path(__file__).parent.parent / "data" / "gallery"
+GALLERY_DIR = DATA_ROOT / "gallery"
 GALLERY_DIR.mkdir(parents=True, exist_ok=True)
 
 

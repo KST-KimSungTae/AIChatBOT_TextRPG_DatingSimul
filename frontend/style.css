@@ -25,6 +25,7 @@
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 2rem;
 }
+.list__head-actions { display: flex; align-items: center; gap: 0.6rem; }
 .brand {
   font-family: "Noto Serif KR", serif;
   font-size: 1.8rem; font-weight: 600; letter-spacing: 0.02em;

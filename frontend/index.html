@@ -16,7 +16,10 @@
     <div class="list">
       <header class="list__head">
         <h1 class="brand">캐릭터 챗</h1>
-        <button class="btn btn--ember" id="newCharBtn">+ 새 캐릭터</button>
+        <div class="list__head-actions">
+          <button class="btn btn--ember" id="newCharBtn">+ 새 캐릭터</button>
+          <button class="btn btn--ghost" id="quitBtn" title="프로그램 종료">종료</button>
+        </div>
       </header>
       <div class="cards" id="cards"></div>
       <p class="list__empty" id="listEmpty" hidden>아직 만든 캐릭터가 없어. 새로 하나 만들어봐.</p>
@@ -68,7 +71,7 @@
             <input class="composer__action" id="actionInput" type="text"
                    placeholder="행동·상황 (선택) — 예: 눈을 크게 뜨며" aria-label="행동/상황 입력">
             <input class="composer__input" id="input" type="text"
-                   placeholder="대화 (선택) — 예: 오늘 이쁘네?" aria-label="대화 입력">
+                   placeholder="대화 (선택) — 예: 잘 지냈어?" aria-label="대화 입력">
           </div>
           <div class="composer__buttons">
             <button class="composer__send" id="sendBtn" type="submit">보내기</button>
@@ -126,7 +129,7 @@
     <div class="overlay__box">
       <div class="overlay__spinner"></div>
       <h2 class="overlay__title">캐릭터를 준비하는 중…</h2>
-      <p class="overlay__desc">성격과 상황을 분석해 첫 감정을 잡고 있어.<br>보통 10~30초 정도 걸려.</p>
+      <p class="overlay__desc">성격과 상황을 분석해 첫 감정을 잡고 있어.<br>보통 2~3분 정도 걸려. (조금만 기다려줘.)</p>
       <div class="overlay__timer" id="overlayTimer">0초</div>
     </div>
   </div>

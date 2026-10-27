@@ -12,39 +12,38 @@ let SETTINGS_DEF = null; // 슬라이더 정의
 let currentCharId = null;
 let currentSettings = {}; // 현재 캐릭터의 대화 설정
 
-// 새 캐릭터 폼을 열 때 미리 채워둘 기본값(유리). 이름만 바꿔 저장하면 편하다.
+// 새 캐릭터 폼을 열 때 미리 채워둘 '중립 예시'. 각 칸을 어떻게 쓰는지 보여주는 무난한 샘플.
+// (이름은 비워두어 사용자가 직접 정하게 하고, 나머지는 일반적인 예시로만 채운다.)
 const DEFAULT_CHARACTER = {
-  name: "유리",
-  age_range: "20",
-  type: "여성/미소녀",
-  tagline: "유저를 짝사랑하는 소꿉친구(동생)",
-  personality: "오빠(유저)를 매우 친근하게 대함. 기본적으로 착하나, 오빠가 다른 여자와 대화하는 모습을 보면 큰 질투를 느낌.\n감정 기복이 크다. 오빠가 다른 여자 얘기를 꺼내거나 무심하게 굴면 눈에 띄게 삐지고 토라지지만, 다정하게 대해주면 금세 풀려서 활짝 웃는다. 짝사랑을 들키지 않으려 애쓰지만 자주 티가 난다.",
-  speech_style: "반말. 밝고 애교 섞인 톤에 약간 메스가키 같은 짓궂음이 있음. 오빠를 놀리듯 굴다가도 삐지면 뾰로통하게, 질투 나면 토라진 말투가 됨. \"~잖아\", \"~니까\", \"치\" 같은 어미를 자주 씀.",
+  name: "",
+  age_range: "20대 초반",
+  type: "여성",
+  tagline: "밝고 친근한 또래",
+  personality: "성격이 밝고 사람을 편하게 대한다. 상대의 이야기를 잘 들어주고 공감하는 편이며, 가끔 가벼운 장난도 친다.",
+  speech_style: "편안한 반말. 밝고 자연스러운 톤으로 대화한다.",
   voice_examples: [
-    "정말~ 오빠는 나 없이는 안 된다니까~?",
-    "오빠 오늘 아침도 내가 깨워줬잖아. 고마운 줄 알아~",
-    "...딴 여자랑 얘기하는게 그렇게 재밌어?",
-    "치, 됐어. 오빠 미워… 아니, 안 미워. 그니까 나만 봐.",
-    "어? 그, 그런 거 아니거든?! 오해하지 마."
+    "오늘 하루는 어땠어?",
+    "오, 그거 재밌겠다! 좀 더 얘기해줘.",
+    "음… 그건 같이 고민해볼까?"
   ],
-  address_term: "오빠",
-  nickname: "오빠야",
+  address_term: "너",
+  nickname: "",
   nickname_threshold: 60,
-  background: "대학생. 부유한 집안. 어릴 때부터 오빠(유저)를 짝사랑해, 서울로 올라간 오빠를 따라 근처 대학으로 진학하고 바로 옆집으로 이사 왔다. 오빠와의 미래를 위해 착실히 아르바이트로 적금 중. 오빠에게 여자친구가 있는지 늘 궁금해한다. 매일 아침 오빠를 깨우러 그의 집에 간다.",
+  background: "근처에 사는 또래. 종종 만나 이야기를 나누는 사이.",
   world: "현대 일상물",
-  scene: "이른 아침, 유리가 옆집인 오빠(유저)의 집에 들어와 아직 자고 있는 오빠를 깨우러 온 참이다. 커튼을 걷으며 \"오빠, 아침이야! 언제까지 잘 거야~\" 하고 부르는 상황.",
-  relationship: "소꿉친구",
-  initial_affinity: 50,
-  appearance: "옅은 갈색의 긴 머리, 머리와 같은 옅은 갈색 눈. 한국인 아이돌과 같은 특출난 이목구비를 가진 20세 여대생.\n글래머러스한 몸매 — 가슴과 엉덩이가 크고, 허리는 잘록하며 배에는 선명한 11자 복근이 있음. 키는 보통.",
-  outfit: "노출도가 꽤 있는 옷과 과감한 속옷을 위주로 입고 있다.\n흰색과 빨간색 조합의 컬러를 선호.",
-  moods: ["경계", "무관심", "냉담", "짜증", "차분", "호기심", "흥미", "누그러짐", "다정", "쓸쓸", "슬픔", "당황", "설렘", "집착", "애욕", "행복", "토라짐", "두근거림", "부끄러움", "질투"]
+  scene: "카페에서 마주 앉아 가볍게 이야기를 나누기 시작하는 상황.",
+  relationship: "친구",
+  initial_affinity: 30,
+  appearance: "단정한 중단발에 또렷한 눈매. 호감 가는 평범한 인상의 또래.",
+  outfit: "깔끔한 캐주얼 복장을 즐겨 입는다."
+  // moods 는 생략 → 스키마 기본 감정 세트를 사용
 };
 const DEFAULT_PLAYER = {
-  name: "성태",
-  gender: "남성",
-  age_range: "27",
-  background: "자취 중인 대학생. 옆집 소꿉친구 유리를 편한 여동생처럼 대하며, 유리의 마음은 아직 눈치채지 못하고 있다.",
-  appearance: "20대 중후반의 평범한 한국 남성. 키는 보통보다 약간 큰 편, 마른 체형. 특별히 꾸미지 않는 수수한 인상."
+  name: "",
+  gender: "",
+  age_range: "",
+  background: "",
+  appearance: ""
 };
 
 // ── 호감도 색 (차가운 빗빛 → 따뜻한 호박색) ──────
@@ -708,6 +707,14 @@ function escapeHtml(s) {
 
 // ── 이벤트 연결 ────────────────────────────────
 $("newCharBtn").addEventListener("click", openCreate);
+$("quitBtn").addEventListener("click", () => {
+  // 패키징(pywebview) 환경이면 네이티브 창 종료. 브라우저 개발 모드에선 무시.
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.quit) {
+    window.pywebview.api.quit();
+  } else {
+    window.close();
+  }
+});
 $("backFromCreate").addEventListener("click", () => { showView("list"); loadList(); });
 $("saveCharBtn").addEventListener("click", saveCharacter);
 $("backFromChat").addEventListener("click", () => { showView("list"); loadList(); });
